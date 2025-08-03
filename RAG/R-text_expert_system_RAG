@@ -1,0 +1,93 @@
+# Install Ollama
+  # macOS / Linux (Homebrew):
+  # brew install ollama
+# Windows (PowerShell / winget):
+  # winget install Ollama.Ollama
+  # (or grab the MSI from https://ollama.com/download)
+  # to uninstall use winget uninstall Ollama.Ollama
+
+# Fetch the LLM & an encoder using the terminal (for macOS and windows)
+# ollama pull gemma3:4b      # chat model (≈4B params)
+# ollama pull bge-base       # 768‑d encoder for embeddings
+
+# R packages (≈30s)
+install.packages(c(
+  "ellmer",     # chat client
+  "ragnar",     # RAG helpers
+  "duckdb"     # DB engine
+  ))
+
+# import libraries
+library(ellmer)
+library(ragnar)
+library(duckdb)
+library(DBI)
+
+# Enable Vector-search extension
+
+library(DBI)
+con <- dbConnect(duckdb::duckdb(), dbdir = "rag.sqlite")
+# downloads & registers HNSW extension binaries once
+dbExecute(con, "INSTALL vss;")
+dbExecute(con, "LOAD vss;")
+
+# set the env-var just for this session in the terminal
+# $env:OLLAMA_MODELS = "gemma3:4b,bge-m3"
+
+# then launch the server (foreground)
+# ollama serve
+
+---
+  # If an existing Ollama instance exists, try the following:
+    # Get-Process -Name ollama; -->list running instances
+    # Stop-Process -Name ollama --> kills running instances
+  
+  # stop process only works if powershell can match an exact same process name
+  
+---
+  # Locate the PID listening on 11434
+  # netstat -ano | findstr :11434
+  
+  # last number of the output is the Process ID (PID)
+  
+  # replace with the PID you saw, use taskkill command
+  # taskkill /PID 12345 /F
+---
+  # use the below command to verify if the port is free
+  # netstat -ano | findstr :11434
+  
+---
+  # alternatively, choose a different port
+  # $env:OLLAMA_MODELS = "gemma3:4b,bge-m3"
+  # ollama serve --p 11435
+
+library(ellmer)
+
+# Step 1: Check what models Ollama has available
+models_ollama()
+
+# Step 2: Send a prompt using a specific model
+resp <- chat_ollama(
+  model = "gemma3:4b",
+  system_prompt = "You are a helpful assistant.",
+  api_args = list(messages = list(list(role = "user", content = "Explain quantum entanglement.")))
+)
+
+cat(resp$last_turn("assistant"))
+
+library(ragnar)
+
+kb <- rag_build(
+  input      = "docs/",                         # folder of PDFs/MD/TXT
+  embedder   = rag_embed_ollama(model = "bge-base"),
+  storage    = rag_store_duckdb("rag.sqlite"),  # DB + HNSW index
+  chunk_size = 400, overlap = 40                # tweak as needed
+)
+
+answer <- rag_chat(
+  "Summarise our parental‑leave policy in one paragraph.",
+  kb,
+  llm = ellmer_chat(temperature = 0.2)
+)
+cat(answer)
+
