@@ -38,15 +38,8 @@ pip install anthropic --break-system-packages
 ```
 
 3. **Set up your API key**:
-
-Linux/Mac
 ```bash
 export ANTHROPIC_API_KEY='your-api-key-here'
-```
-
-Windows
-```bash
-set ANTHROPIC_API_KEY='your-api-key-here'
 ```
 
 Or set it in your Python script:
