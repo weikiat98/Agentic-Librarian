@@ -8,11 +8,11 @@ import json
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-from anthropic import Anthropic
+from anthropic import Anthropic # run pip3 install anthropic if not done yet for python3
 
 # Initialize Anthropic client
 client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-haiku-4-5-20251001"
 
 class AgentRole(Enum):
     LEAD_ORCHESTRATOR = "lead_orchestrator"
@@ -98,8 +98,8 @@ You can delegate tasks, review subagent outputs, and compile comprehensive final
 
 User Request: {user_request}
 
-Document Content Preview (first 2000 chars):
-{document_content[:2000]}
+Document Content Preview (first 12000 chars):
+{document_content[:12000]}
 
 Total document length: {len(document_content)} characters
 
@@ -124,7 +124,7 @@ Guidelines:
 
         response = client.messages.create(
             model=MODEL,
-            max_tokens=4000,
+            max_tokens=40000,
             system=self.get_system_prompt(),
             messages=[{"role": "user", "content": analysis_prompt}]
         )
