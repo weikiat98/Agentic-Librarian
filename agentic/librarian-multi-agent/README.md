@@ -1,6 +1,6 @@
 # Librarian Agents Team - Document Processing System
 
-A sophisticated multi-agent system built with Python and Claude Sonnet 4.5 for intelligently processing large documents (50 to thousands of pages). The system uses a lead orchestrator and three specialized sub-agents to break down, analyze, and transform document content.
+A sophisticated multi-agent system built with Python and Claude for intelligently processing large documents (50 to thousands of pages). The system uses a lead orchestrator and three specialized sub-agents to break down, analyze, and transform document content.
 
 ## 🎯 Overview
 
@@ -45,8 +45,13 @@ export ANTHROPIC_API_KEY='your-api-key-here'
 ```
 
 Windows
+
+Search for Edit the system environment variables and add the ANTHROPIC_API_KEY directly.
+
+OR
+
 ```bash
-set ANTHROPIC_API_KEY='your-api-key-here'
+setx ANTHROPIC_API_KEY='your-api-key-here'
 ```
 
 Or set it in your Python script:
@@ -55,14 +60,24 @@ import os
 os.environ['ANTHROPIC_API_KEY'] = 'your-api-key-here'
 ```
 
+**Once API key has been added or set, it is strongly recommended to restart your terminal to see the changes.**
+
 ## 📁 Project Structure
 
 ```
 librarian-agents-team/
-├── librarian_agents_team.py    # Main system with all agents
-├── document_chunker.py         # Document chunking utilities
-├── advanced_examples.py        # Comprehensive usage examples
-└── README.md                   # This file
+├── ARCHITECTURE.md             # Describes the overall system design and agent interactions.
+├── EXECUTION_FLOW.md           # Details the step-by-step process of how the agents complete a task.
+├── PROJECT_SUMMARY.md          # High-level overview of the project's goals and functionality.
+├── QUICKSTART.md               # Instructions for rapidly setting up and running the system for the first time.
+├── README.md                   # The main introductory file for the repository.
+├── USAGE_GUIDE.md              # Detailed documentation on how to use all features of the system.
+├── advanced_examples.py        # Comprehensive usage examples and non-trivial demonstrations.
+├── cli.py                      # Command-Line Interface to interact with the system.
+├── document_chunker.py         # Utilities for breaking down large documents into smaller pieces.
+├── document_loader.py          # Code for loading and ingesting various document types.
+├── librarian_agents_team.py    # Main system file containing the definition and orchestration of all agents.
+└── test_example.py             # Script for running tests or a simple example verification.
 ```
 
 ## 💡 Quick Start
