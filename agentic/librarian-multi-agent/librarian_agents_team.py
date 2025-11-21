@@ -1,6 +1,8 @@
 """
 Librarian Agents Team - Document Processing System
 A multi-agent system for breaking down large documents with specialized agents
+
+OPTIMIZED FOR CLAUDE HAIKU 4.5 with 1-hour prompt caching
 """
 
 import os
@@ -8,7 +10,7 @@ import json
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-from anthropic import Anthropic # run pip3 install anthropic if not done yet for python3
+from anthropic import Anthropic
 
 # Initialize Anthropic client
 client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
@@ -94,12 +96,22 @@ You can delegate tasks, review subagent outputs, and compile comprehensive final
     def analyze_request(self, user_request: str, document_content: str) -> List[Task]:
         """Analyze user request and create task breakdown"""
         
-        analysis_prompt = f"""Analyze this document processing request and create a task breakdown.
-
-User Request: {user_request}
-
-Document Content Preview (first 5000 chars):
-{document_content[:5000]}
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=32000,
+            system=self.get_system_prompt(),
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Document Preview (first 5000 chars):\n{document_content[:5000]}",
+                            "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"""User Request: {user_request}
 
 Total document length: {len(document_content)} characters
 
@@ -121,18 +133,10 @@ Guidelines:
 - Assign table generation to subagent_3
 - Break large documents into manageable chunks
 - Consider document structure (pages, chapters, sections)"""
-
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=8000,
-            system=[
-                {
-                "type": "text",
-                "text": self.get_system_prompt(),
-                "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
                 }
-            ],
-            messages=[{"role": "user", "content": analysis_prompt}]
+            ]
         )
         
         # Parse response and create Task objects
@@ -177,12 +181,22 @@ Guidelines:
             for task in tasks if task.result
         ])
         
-        compilation_prompt = f"""Compile the following subagent results into a coherent final output.
-
-Original User Request: {user_request}
-
-Subagent Results:
-{results_summary}
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=32000,
+            system=self.get_system_prompt(),
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Subagent Results:\n{results_summary}",
+                            "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"""Original User Request: {user_request}
 
 Instructions:
 - Present a unified, well-structured output
@@ -191,18 +205,10 @@ Instructions:
 - Present only the final compiled content
 - If the output is very long, prepare to stop and ask user to continue
 - Be direct and professional"""
-
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=8000,
-            system=[
-                {
-                "type": "text",
-                "text": self.get_system_prompt(),
-                "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
                 }
-            ],
-            messages=[{"role": "user", "content": compilation_prompt}]
+            ]
         )
         
         return response.content[0].text
@@ -239,26 +245,26 @@ You work under the Lead Orchestrator's direction."""
     def process(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
         """Process assigned text task"""
         
-        prompt = f"""Task: {task.description}
-
-Content to process:
-{task.content}
-
-Additional context: {json.dumps(context, indent=2)}
-
-Provide the processed output directly. If you need clarification, clearly state your question."""
-
         response = client.messages.create(
             model=MODEL,
-            max_tokens=8000,
-            system=[
+            max_tokens=32000,
+            system=self.get_system_prompt(),
+            messages=[
                 {
-                "type": "text",
-                "text": self.get_system_prompt(),
-                "cache_control": {"type": "ephemeral"}
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Content to process:\n{task.content}",
+                            "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Task: {task.description}\n\nAdditional context: {json.dumps(context, indent=2)}\n\nProvide the processed output directly. If you need clarification, clearly state your question."
+                        }
+                    ]
                 }
-            ],
-            messages=[{"role": "user", "content": prompt}]
+            ]
         )
         
         result_text = response.content[0].text
@@ -309,26 +315,26 @@ You work under the Lead Orchestrator's direction."""
     def process(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
         """Process assigned text task"""
         
-        prompt = f"""Task: {task.description}
-
-Content to process:
-{task.content}
-
-Additional context: {json.dumps(context, indent=2)}
-
-Provide the processed output directly. If you need clarification, clearly state your question."""
-
         response = client.messages.create(
             model=MODEL,
-            max_tokens=8000,
-            system=[
+            max_tokens=32000,
+            system=self.get_system_prompt(),
+            messages=[
                 {
-                "type": "text",
-                "text": self.get_system_prompt(),
-                "cache_control": {"type": "ephemeral"}
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Content to process:\n{task.content}",
+                            "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Task: {task.description}\n\nAdditional context: {json.dumps(context, indent=2)}\n\nProvide the processed output directly. If you need clarification, clearly state your question."
+                        }
+                    ]
                 }
-            ],
-            messages=[{"role": "user", "content": prompt}]
+            ]
         )
         
         result_text = response.content[0].text
@@ -384,26 +390,26 @@ When creating tables:
     def process(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
         """Process assigned table generation task"""
         
-        prompt = f"""Task: {task.description}
-
-Content to process:
-{task.content}
-
-Additional context: {json.dumps(context, indent=2)}
-
-Generate the requested table. If you need clarification about table structure, column names, or formatting, clearly state your question."""
-
         response = client.messages.create(
             model=MODEL,
-            max_tokens=8000,
-            system=[
+            max_tokens=32000,
+            system=self.get_system_prompt(),
+            messages=[
                 {
-                "type": "text",
-                "text": self.get_system_prompt(),
-                "cache_control": {"type": "ephemeral"}
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Content to process:\n{task.content}",
+                            "cache_control": {"type": "ephemeral", "ttl": "1h"}
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Task: {task.description}\n\nAdditional context: {json.dumps(context, indent=2)}\n\nGenerate the requested table. If you need clarification about table structure, column names, or formatting, clearly state your question."
+                        }
+                    ]
                 }
-            ],
-            messages=[{"role": "user", "content": prompt}]
+            ]
         )
         
         result_text = response.content[0].text
@@ -534,65 +540,4 @@ def main():
     # Initialize the team
     team = LibrarianAgentsTeam()
     
-    # Example document (simulating a large document)
-    sample_document = """
-    CHAPTER 1: INTRODUCTION TO ARTIFICIAL INTELLIGENCE
     
-    Artificial Intelligence (AI) has revolutionized the modern world. This chapter 
-    explores the fundamental concepts, history, and applications of AI across various 
-    domains.
-    
-    1.1 Definition and Scope
-    AI refers to the simulation of human intelligence in machines programmed to think
-    and learn like humans. The scope includes machine learning, natural language 
-    processing, computer vision, and robotics.
-    
-    1.2 Historical Development
-    The field of AI began in the 1950s with pioneers like Alan Turing and John McCarthy.
-    Key milestones include:
-    - 1950: Turing Test proposed
-    - 1956: Dartmouth Conference - birth of AI
-    - 1997: Deep Blue defeats chess champion
-    - 2012: Deep learning breakthrough
-    - 2023: Large language models achieve human-level performance
-    
-    CHAPTER 2: MACHINE LEARNING FUNDAMENTALS
-    
-    Machine learning is a subset of AI focused on algorithms that improve through experience.
-    
-    2.1 Types of Machine Learning
-    - Supervised Learning: Learning from labeled data
-    - Unsupervised Learning: Finding patterns in unlabeled data
-    - Reinforcement Learning: Learning through trial and error
-    
-    2.2 Key Algorithms
-    Common algorithms include linear regression, decision trees, neural networks,
-    and support vector machines.
-    """
-    
-    # Example 1: Summarization request
-    print("\n" + "="*80)
-    print("EXAMPLE 1: Document Summarization")
-    print("="*80 + "\n")
-    
-    request1 = "Create a concise summary of this document, highlighting the main topics covered in each chapter."
-    result1 = team.process_document(request1, sample_document)
-    print("\n[OUTPUT]")
-    print(result1)
-    
-    # Example 2: Table generation request
-    print("\n\n" + "="*80)
-    print("EXAMPLE 2: Table Generation")
-    print("="*80 + "\n")
-    
-    request2 = "Extract the historical AI milestones and present them in a well-formatted table with columns for Year, Event, and Significance."
-    result2 = team.process_document(request2, sample_document)
-    print("\n[OUTPUT]")
-    print(result2)
-    
-    print("\n\n" + "="*80)
-    print("Examples completed. System ready for production use.")
-    print("="*80)
-
-if __name__ == "__main__":
-    main()
