@@ -1,9 +1,6 @@
-# Librarian Agents Team - Complete Documentation
+# Librarian Agents Team 
 
-> **A sophisticated multi-agent system for intelligently processing large documents using Claude AI**
-
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+> **A multi-agent system for intelligently processing large documents**
 
 ---
 
@@ -15,24 +12,22 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Detailed Usage Guide](#detailed-usage-guide)
-- [Current Limitations & Known Issues](#current-limitations--known-issues)
 - [Working with Large Documents](#working-with-large-documents)
 - [File Structure](#file-structure)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
 - [Best Practices](#best-practices)
-- [Future Improvements](#future-improvements)
 
 ---
 
 ## Overview
 
-The Librarian Agents Team is a multi-agent document processing system built with Python and Claude AI (Anthropic). It intelligently breaks down, analyzes, and transforms document content using specialized AI agents.
+The Librarian Agents Team is a multi-agent document processing system, intelligently breaking down, analysing, and transforming document content using specialised AI agents.
 
 ### Key Features
 
-✅ **Multi-Agent Architecture**: Coordinated team of specialized agents  
+✅ **Multi-Agent Architecture**: Coordinated team of specialised agents  
 ✅ **Intelligent Task Delegation**: Automatic task breakdown and assignment  
 ✅ **Multiple Document Formats**: PDF, DOCX, TXT, HTML, Markdown  
 ✅ **Interactive & Batch Modes**: CLI interface for flexibility  
@@ -51,7 +46,7 @@ The Librarian Agents Team is a multi-agent document processing system built with
    - Manages context windows
 
 2. **SubAgent 1: Text Processing Specialist**
-   - Document summarization
+   - Document summarisation
    - Text analysis and extraction
    - Content condensing
    - Key points identification
@@ -76,55 +71,55 @@ The Librarian Agents Team is a multi-agent document processing system built with
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                       USER INTERFACE                         │
+│                       USER INTERFACE                        │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
+│                                                             │
 │  cli.py (Command-Line Interface)                            │
-│  - Interactive mode                                          │
-│  - Batch processing                                          │
-│  - File upload handling                                      │
-│                                                              │
-└──────────────────────┬───────────────────────────────────────┘
+│  - Interactive mode                                         │
+│  - Batch processing                                         │
+│  - File upload handling                                     │
+│                                                             │
+└──────────────────────┬──────────────────────────────────────┘
                        │
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    UTILITY LAYER                             │
+│                    UTILITY LAYER                            │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  document_loader.py (✅ Auto-used by CLI)                   │
+│                                                             │
+│  document_loader.py (✅ Auto-used by CLI)                  │
 │  - Loads PDF, DOCX, TXT, HTML, MD                           │
-│  - Extracts text content                                     │
-│  - Automatically called by CLI                               │
-│                                                              │
+│  - Extracts text content                                    │
+│  - Automatically called by CLI                              │
+│                                                             │
 │  document_chunker.py (⚠️ Used via wrapper scripts)          │
-│  - Automated smart chunking algorithms                       │
-│  - Structure detection (chapters/pages/sections)             │
+│  - Automated smart chunking algorithms                      │
+│  - Structure detection (chapters/pages/sections)            │
 │  - Must be used in multi-step workflow for >200K docs       │
-│                                                              │
-└──────────────────────┬───────────────────────────────────────┘
+│                                                             │
+└──────────────────────┬──────────────────────────────────────┘
                        │
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                   PROCESSING ENGINE                          │
+│                   PROCESSING ENGINE                         │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
+│                                                             │
 │  librarian_agents_team.py (Core System)                     │
-│  - Lead Orchestrator Agent                                   │
+│  - Lead Orchestrator Agent                                  │
 │  - SubAgent 1 (Text Processing)                             │
 │  - SubAgent 2 (Text Transformation)                         │
 │  - SubAgent 3 (Table Generation)                            │
-│  - Task delegation logic                                     │
-│  - Result compilation                                        │
-│                                                              │
-└──────────────────────┬───────────────────────────────────────┘
+│  - Task delegation logic                                    │
+│  - Result compilation                                       │
+│                                                             │
+└──────────────────────┬──────────────────────────────────────┘
                        │
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                     CLAUDE API                               │
-│  - Model: Claude Haiku 4.5 or Sonnet 4.5                   │
+│                     CLAUDE API                              │
+│  - Model: Claude Haiku 4.5 or Sonnet 4.5                    │
 │  - 200K token context window                                │
-│  - 64K token max output                                      │
-│  - Prompt caching support                                    │
+│  - 64K token max output                                     │
+│  - Prompt caching support                                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -173,8 +168,6 @@ User uploads document (PDF/DOCX/TXT)
 
 - **Python**: 3.8 or higher
 - **Operating System**: Windows, macOS, or Linux
-- **Memory**: 4GB RAM minimum (8GB recommended for large documents)
-- **Disk Space**: 500MB for dependencies and temporary files
 
 ### Required Accounts
 
@@ -294,7 +287,7 @@ python cli.py -i document.pdf --interactive
 ### Example Session
 
 ```bash
-$ python cli.py -i "Communist Manifesto.pdf" --interactive
+$ python cli.py -i "your-document.pdf" --interactive
 
 📄 Loading document...
 ✓ Loaded 25,000 characters (~6,250 tokens)
@@ -304,7 +297,7 @@ $ python cli.py -i "Communist Manifesto.pdf" --interactive
 Interactive Mode - Librarian Agents Team
 ============================================================
 Document loaded successfully!
-Document: Communist Manifesto.pdf
+Document: your-document.pdf
 Size: 25000 characters
 
 Type your request or 'quit' to exit
@@ -491,7 +484,7 @@ Question: What columns should the table include? What items to compare?
 
 Save this result? (y/N): N  ← Type N (don't save the question)
 
-Your request: Include columns for Name, Price, Features, and Rating. Compare iPhone, Samsung Galaxy, and Google Pixel
+Your request: Insert your clarification or prompt here
 
 [Agent processes with your clarification]
 
@@ -554,60 +547,10 @@ Output file path: C:\Users\YourName\Documents\Projects\output.txt
 
 ⚠️ **Important:** Do NOT include quotes around file paths when saving interactively!
 
----
-
-## Current Limitations & Known Issues
-
-### ⚠️ Critical Limitation: Document Size Handling
-
-#### Maximum Automatic Processing Size: ~180,000 tokens (~150 pages)
-
-**What happens with different document sizes:**
-
-| Document Size | Behavior | Action Required |
-|---------------|----------|----------------|
-| **< 180K tokens (~150 pages)** | ✅ Works automatically | None - just upload and process |
-| **180K - 200K tokens** | ⚠️ May work, may fail | Monitor closely; consider multi-step workflow |
-| **> 200K tokens (e.g., 400K)** | 💥 **CRASHES** | **Multi-step workflow required** |
-
-#### Issue: No Automatic Large Document Handling
-
-**Problem:**
-
-When you upload a document larger than 200K tokens (approximately 150-200 pages), the system will:
-
-1. ✅ Load the document successfully (via `document_loader.py`)
-2. ✅ Lead Orchestrator analyzes it successfully (only looks at first 5000 characters)
-3. 💥 **Crash when SubAgents try to process** (attempts to send full document to API)
-
-**Error Message:**
-```
-anthropic.BadRequestError: messages: total length of messages must be at most 200000 tokens. 
-Your request was 400000 tokens.
-```
-
-**Why This Happens:**
-
-- Claude Haiku 4.5 / Sonnet 4.5 have a **200,000 token input limit**
-- The CLI does NOT automatically detect and chunk large documents
-- The agent system does NOT automatically use `document_chunker.py`
-- You must use a multi-step workflow for documents >200K tokens
-
-**Root Cause:**
-```python
-# In librarian_agents_team.py - process_document() method
-def process_document(self, user_request, document_content, ...):
-    # NO size check here ❌
-    # NO automatic chunking here ❌
-    
-    # Directly passes full document to agents
-    self.current_tasks = self.lead.analyze_request(user_request, document_content)
-    # If document_content is 400K tokens, this will crash ❌
-```
 
 ---
 
-### 🔍 Other Known Issues
+### 🔍 Known Issues
 
 #### Issue 1: Terminal Output Formatting
 
@@ -977,8 +920,8 @@ python combine_results.py
 ┌──────────────────────────────────────────────────────────┐
 │ ONE-TIME SETUP (Create wrapper scripts)                  │
 ├──────────────────────────────────────────────────────────┤
-│ 1. Create chunk_large_doc.py (20 lines)                 │
-│ 2. Create combine_results.py (15 lines)                 │
+│ 1. Create chunk_large_doc.py (20 lines)                  │
+│ 2. Create combine_results.py (15 lines)                  │
 │                                                          │
 │ ✅ Do this once, reuse forever                          │
 └──────────────────────────────────────────────────────────┘
@@ -986,20 +929,20 @@ python combine_results.py
 ┌──────────────────────────────────────────────────────────┐
 │ FOR EACH LARGE DOCUMENT                                  │
 ├──────────────────────────────────────────────────────────┤
-│ Step 1: python chunk_large_doc.py file.pdf              │
-│         └─> Uses automated chunking algorithms ✅        │
+│ Step 1: python chunk_large_doc.py file.pdf               │
+│         └─> Uses automated chunking algorithms ✅       │
 │                                                          │
-│ Step 2: python cli.py -i chunk_0.txt --interactive      │
+│ Step 2: python cli.py -i chunk_0.txt --interactive       │
 │         [Save as result_0.txt]                           │
 │                                                          │
-│ Step 3: python cli.py -i chunk_1.txt --interactive      │
+│ Step 3: python cli.py -i chunk_1.txt --interactive       │
 │         [Save as result_1.txt]                           │
 │                                                          │
-│ Step 4: python cli.py -i chunk_2.txt --interactive      │
+│ Step 4: python cli.py -i chunk_2.txt --interactive       │
 │         [Save as result_2.txt]                           │
 │                                                          │
-│ Step 5: python combine_results.py                       │
-│         └─> Automated merging with headers ✅            │
+│ Step 5: python combine_results.py                        │
+│         └─> Automated merging with headers ✅           │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -1595,55 +1538,6 @@ For Haiku 4.5 ($1 input / $5 output per million tokens):
 
 ---
 
-## Future Improvements
-
-### Planned Enhancements
-
-These features are discussed but not yet implemented:
-
-#### 1. Integrated Large Document Handling
-
-**Current:** Multi-step workflow with wrapper scripts required  
-**Planned:** Automatic detection and processing
-
-**Expected behavior:**
-```bash
-python cli.py -i huge_document.pdf --interactive
-
-[SYSTEM] Document size: 400K tokens (exceeds 200K limit)
-[SYSTEM] Automatically chunking with smart_chunk()...
-[SYSTEM] Split into 3 chunks
-[SYSTEM] Processing chunk 1/3...
-[SYSTEM] Processing chunk 2/3...
-[SYSTEM] Processing chunk 3/3...
-[SYSTEM] Compiling results...
-
-[Unified output displayed]
-```
-
----
-
-#### 2. Size Validation and Warnings
-
-**Current:** No warning before processing  
-**Planned:** Automatic size check with warnings
-
-**Expected behavior:**
-```bash
-python cli.py -i large_file.pdf --interactive
-
-⚠️ WARNING: Document is approximately 250,000 tokens
-⚠️ This exceeds the 200K token limit
-⚠️ Options:
-   1. Automatically chunk and process (recommended)
-   2. Process manually with multi-step workflow
-   3. Cancel
-
-Your choice (1-3):
-```
-
----
-
 #### 3. Progress Indicators
 
 **Current:** Silent processing  
@@ -1664,18 +1558,6 @@ Estimated time remaining: 2 minutes
 
 ---
 
-### Contributing
-
-These improvements are under consideration. If you're interested in contributing:
-
-1. Fork the repository
-2. Create a feature branch
-3. Implement the enhancement
-4. Test thoroughly
-5. Submit a pull request with detailed description
-
----
-
 ## Additional Resources
 
 ### Documentation Files
@@ -1684,12 +1566,6 @@ These improvements are under consideration. If you're interested in contributing
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture deep-dive
 - **[EXECUTION_FLOW.md](EXECUTION_FLOW.MD)** - Detailed execution sequences
 - **[USAGE_GUIDE.md](USAGE_GUIDE.md)** - Visual usage guide with examples
-
-### External Resources
-
-- [Anthropic API Documentation](https://docs.anthropic.com)
-- [Claude Documentation](https://docs.claude.com)
-- [Prompt Engineering Guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering)
 
 ### Getting Help
 
@@ -1701,13 +1577,7 @@ These improvements are under consideration. If you're interested in contributing
 
 ---
 
-## License
-
-MIT License - Free to use in your projects
-
----
-
-## Summary: What You Need to Know
+## Summary
 
 ### ✅ What Works Automatically
 
@@ -1758,6 +1628,6 @@ python combine_results.py                 # Automated merging ✅
 
 **Built with Claude AI for intelligent document processing** 🚀
 
-**Version:** 1.0  
+**Version:** 1.4  
 **Last Updated:** November 24, 2024  
 **Model Support:** Claude Haiku 4.5 / Sonnet 4.5
