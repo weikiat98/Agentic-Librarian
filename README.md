@@ -1271,12 +1271,17 @@ python combine_results.py
 
 ### Issue: "Python not found" Error (Windows)
 
-**Solution 1:** Use `py` instead:
+**Solution 1** Change Directory
+```bash
+    cd C:\Users\YourUsername\Downloads
+```
+
+**Solution 2:** Use `py` instead:
 ```bash
 py cli.py -i document.pdf --interactive
 ```
 
-**Solution 2:** Add Python to PATH:
+**Solution 3:** Add Python to PATH:
 1. Find Python installation location
 2. Add to system PATH environment variable
 3. Restart terminal
