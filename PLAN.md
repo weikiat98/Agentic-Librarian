@@ -1,20 +1,31 @@
-# Multi-Agent Document Processing System — Full-Stack Plan
+# Multi-Agent Deep-Reading Assistant — Full-Stack Plan
 
 ## Context
 
-The repo currently contains a CLI-only, synchronous Python prototype ([librarian_agents_team.py](librarian_agents_team.py)) that orchestrates a Lead agent and three hardcoded SubAgents against Anthropic's Messages API. The goal is to evolve this into a production-grade **multi-agent system for large document processing** with:
+The repo currently contains a CLI-only, synchronous Python prototype ([librarian_agents_team.py](librarian_agents_team.py)) that orchestrates a Lead agent and three hardcoded SubAgents against Anthropic's Messages API. The goal is to evolve this into a **multi-agent deep-reading assistant** for lengthy, high-stakes documents — academic research papers, public policies, regulations, legal Acts, and compliance frameworks.
 
-- A **dynamic agent topology** (Lead + N SubAgents, not fixed at 3), built per Anthropic's recommended patterns.
-- A **web frontend** where users upload documents, issue prompts, and watch the agent team work in real time.
-- A **backend API** that streams progress, persists sessions, and scales to large documents (50–5000+ pages).
+### Who this is for and what they need
 
-The existing document loaders and chunker are solid and will be reused. The orchestration layer needs a rewrite — current code is sequential, has only 3 fixed subagents, and has no web surface.
+The target user is reading *a* document (or a small related set — e.g., an Act + its amendments + a guidance note), not searching across a vast corpus. The value is making dense, technical writing **understandable, navigable, and verifiable**:
 
-**Confirmed design decisions:**
+- **Understandable** — plain-language rewrites at adjustable expertise levels.
+- **Navigable** — cross-reference resolution, glossary lookup, jump-to-section.
+- **Verifiable** — every claim links back to its source span; no unverified paraphrase.
+- **Actionable** — extract obligations/findings into structured tables; compare versions.
+
+This is the **depth axis** of multi-agent document work, not the breadth/corpus axis. A typical session involves 1–5 documents, not 10,000. This framing drives every architectural choice below — notably, **no vector database is required for the core product**.
+
+### Why this is not (yet) a RAG system
+
+RAG — retrieval-augmented generation over a persistent, cross-session corpus — solves a different problem: "find relevant snippets across many documents." That's the breadth axis. This system is optimized for deep transformation of a known document. Retrieval becomes relevant only if and when a user says *"I have 50 regulations, find ones that say anything about X"* — at which point a dedicated phase adds it. Until then, building RAG infrastructure is premature.
+
+### Confirmed design decisions
+
 - Subagents spawned **dynamically via tool use** (orchestrator-workers pattern).
 - Frontend: **Next.js 15 + shadcn/ui**.
-- Persistence: **SQLite + local filesystem** (swappable later).
+- Persistence: **SQLite + local filesystem** (swappable later; sufficient for the depth-axis use case).
 - **CLI retained**, repointed to the new async engine.
+- **Fidelity first**: every agent output must cite source spans. Hallucination on legal/policy text is the primary risk to manage.
 
 ---
 
@@ -54,32 +65,37 @@ Follow Anthropic's **orchestrator-workers pattern** (docs: "Building effective a
 - **LeadOrchestrator** runs an agent loop with **tool use**. Its tools:
   - `spawn_subagent(role, task, context_refs)` — dispatches a subagent; returns a handle.
   - `read_document_chunk(chunk_id)` — pulls from DocumentStore.
-  - `search_document(query)` — keyword/semantic lookup over chunks.
-  - `write_artifact(name, content)` — persists intermediate results.
+  - `search_document(query)` — **within-document** keyword/BM25 lookup over chunks (SQLite FTS5). Scoped to the loaded document(s), not a global corpus.
+  - `resolve_reference(section_id)` — fetches an internally-cross-referenced section (e.g., "subject to Section 4(2)").
+  - `lookup_definition(term)` — fetches a defined term from the document's definitions section.
+  - `write_artifact(name, content)` — persists intermediate results (with source citations).
   - `finalize(result)` — ends the session.
-- **SubAgents** are **not hardcoded roles** — the Lead writes a role description per spawn (e.g., "extract financial tables from chunks 4–7", "summarize chapter 3"). Each subagent runs its own Messages API call with its own tools (`read_document_chunk`, `write_artifact`, `request_clarification`).
+- **SubAgents** are **not hardcoded roles** — the Lead writes a role description per spawn (e.g., "extract all obligations this regulation imposes on small businesses, with section reference and penalty"). Each subagent runs its own Messages API call with its own tools.
 - **Parallelism**: `asyncio.gather` over spawned subagents. Lead waits, then synthesizes.
 - **Context isolation**: each subagent receives only the chunks it needs — keeps context windows small and costs down.
 - **Prompt caching**: cache document chunks (1h TTL, `cache_control: ephemeral`) so repeated subagent calls over the same document are cheap. Cache per-subagent system prompts too.
 - **Streaming**: `client.messages.stream()` on Lead and SubAgents; deltas pushed to the EventBus.
-- **Subagent cloning**: the Lead can spawn N subagents with *identical* role + instructions but different tasks/chunk refs (e.g., 8 parallel summarizers, one per chunk range). This is the core win of dynamic topology over fixed roles.
-- **Per-agent context management**: every subagent is a fresh Messages call with an isolated window — system prompt (cached) + only the chunk IDs it needs. No cross-subagent history. Subagents are ephemeral workers: start clean, return a result, exit. If a single subagent's task is still too large, the Lead splits further before spawning.
-- **Lead-side compaction**: only the Lead has a growing conversation. When its context crosses ~70% of the 200K window, a compaction pass condenses older turns into a structured memory summary (decisions, artifacts produced, open threads) that replaces raw history. Artifacts live in the DB and are referenced by ID, not re-embedded. Auto-trigger at 85%; user can also trigger manually from the frontend.
-- **Why prompt caching still matters even with chat history**: chat history keeps the Lead's memory; caching prevents re-paying for identical prefix tokens (document chunks + system prompts) across many subagent calls. 10 subagents over the same doc → 1× full-price + 9× ~10%-price reads. Cost and latency win; unrelated to memory.
+- **Subagent cloning**: Lead can spawn N subagents with *identical* role + instructions but different tasks/chunk refs (e.g., 8 parallel summarizers, one per chunk range). Core win of dynamic topology over fixed roles.
+- **Per-agent context management**: every subagent is a fresh Messages call with an isolated window — system prompt (cached) + only the chunk IDs it needs. No cross-subagent history.
+- **Lead-side compaction**: when Lead context crosses ~70% of the 200K window, compaction condenses older turns into a structured memory summary. Artifacts live in the DB and are referenced by ID, not re-embedded. Auto-trigger at 85%.
+- **Citation enforcement**: subagent system prompts require every factual claim to carry a source reference (chunk_id + section/page). The Lead rejects subagent output missing citations and respawns the task.
 
 ### Tech stack
 
 - **FastAPI** (async) + **uvicorn**
 - **anthropic** Python SDK (async client)
-- **SQLite** via `aiosqlite` — full persistence of chat history and run telemetry. Schema:
+- **SQLite** via `aiosqlite` with **FTS5** for within-document keyword search. Schema:
   - `sessions` (id, created_at, title)
   - `messages` (id, session_id, role, content, token_usage, created_at)
   - `documents` (id, session_id, filename, chunk_count)
-  - `chunks` (id, document_id, index, content, metadata)
-  - `artifacts` (id, session_id, name, content, mime_type)
-  - `agent_runs` (id, session_id, parent_agent_id, role, status, tokens_in, tokens_out) — powers trace replay
+  - `chunks` (id, document_id, index, content, metadata, section_id, page)
+  - `chunks_fts` (FTS5 virtual table mirroring chunks.content)
+  - `definitions` (id, document_id, term, definition, source_chunk_id)
+  - `cross_refs` (id, document_id, from_chunk_id, to_section_id)
+  - `artifacts` (id, session_id, name, content, mime_type, citations_json)
+  - `agent_runs` (id, session_id, parent_agent_id, role, status, tokens_in, tokens_out)
 - **Local filesystem** for uploaded documents
-- **SSE** for streaming agent events to the browser (simpler than WebSockets for one-way push)
+- **SSE** for streaming agent events (simpler than WebSockets for one-way push)
 - **pydantic v2** for schemas
 - Reuse: [document_loader.py](document_loader.py), [document_chunker.py](document_chunker.py)
 
@@ -88,7 +104,7 @@ Follow Anthropic's **orchestrator-workers pattern** (docs: "Building effective a
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/sessions` | Create a chat session |
-| POST | `/api/sessions/{id}/documents` | Upload document (multipart); loader + chunker run; chunks stored |
+| POST | `/api/sessions/{id}/documents` | Upload document (multipart); loader + chunker + definition/cross-ref extractor run |
 | POST | `/api/sessions/{id}/messages` | Submit user prompt; kicks off agent run |
 | GET | `/api/sessions/{id}/stream` | SSE stream: agent events |
 | GET | `/api/sessions/{id}` | Session history + artifacts |
@@ -116,9 +132,11 @@ Follow Anthropic's **orchestrator-workers pattern** (docs: "Building effective a
 - `backend/orchestrator/subagent.py` — SubAgent runner
 - `backend/orchestrator/tools.py` — tool definitions + handlers
 - `backend/orchestrator/event_bus.py` — in-process pub/sub for SSE
-- `backend/orchestrator/compactor.py` — Lead-context compaction pass (condenses old turns into a memory summary)
-- `backend/store/documents.py` — DocumentStore (wraps existing loader/chunker)
+- `backend/orchestrator/compactor.py` — Lead-context compaction pass
+- `backend/store/documents.py` — DocumentStore (wraps existing loader/chunker, adds FTS indexing)
 - `backend/store/sessions.py` — SQLite session persistence
+- `backend/extractors/definitions.py` — pull defined-term sections from uploaded doc
+- `backend/extractors/cross_refs.py` — detect "Section X", "Article Y" patterns
 - `backend/models.py` — pydantic schemas
 
 Keep [document_loader.py](document_loader.py), [document_chunker.py](document_chunker.py) at repo root; import from `backend/`.
@@ -152,12 +170,14 @@ Three-pane layout:
 ### UX principles
 
 - **Drag-and-drop upload** with progress, page count preview, per-file chunk stats.
-- **Streaming first**: every agent token streams into the chat; the trace panel updates live as subagents spawn.
-- **Transparency without noise**: trace panel is collapsible; default shows a compact "3 agents working…" indicator with expandable detail.
-- **Artifacts**: tables, summaries, and generated files render inline with download buttons; long outputs open in a "view full" modal.
-- **Interruptibility**: a Stop button cancels the run (backend sends `AbortSignal` to the Anthropic client).
+- **Streaming first**: every agent token streams into the chat; trace panel updates live.
+- **Citation-forward rendering**: every factual claim in agent output is a clickable link to the source chunk (opens a side drawer showing the original passage with the cited span highlighted).
+- **Audience-level toggle**: each response has a "Explain as: layperson / professional / expert" selector that re-renders the passage at that level.
+- **Transparency without noise**: trace panel is collapsible; default shows compact "3 agents working…" indicator.
+- **Artifacts**: tables, summaries, extracted obligation lists render inline with download buttons.
+- **Interruptibility**: Stop button cancels the run.
 - **Resume**: sessions persist — reload the page, pick up the history.
-- **Context meter**: header strip shows live Lead-context usage — `Context: 34% (68K / 200K)`. Color-coded (green < 70%, amber 70–90%, red > 90%). A **Compact** button sits next to it — disabled below 30%, one-click above. Auto-compaction at 85% surfaces a toast with a "View summary" link.
+- **Context meter**: header strip shows live Lead-context usage — `Context: 34% (68K / 200K)`. Color-coded (green < 70%, amber 70–90%, red > 90%). **Compact** button next to it.
 
 ### Critical frontend files (new)
 
@@ -167,6 +187,9 @@ Three-pane layout:
 - `frontend/components/AgentTrace.tsx` — renders SSE event tree
 - `frontend/components/UploadZone.tsx`
 - `frontend/components/ArtifactCard.tsx`
+- `frontend/components/CitationLink.tsx` — inline citation with drawer
+- `frontend/components/SourceDrawer.tsx` — shows original passage with highlight
+- `frontend/components/AudienceToggle.tsx` — layperson/professional/expert selector
 - `frontend/components/ContextMeter.tsx` — live token-usage bar + Compact button
 - `frontend/lib/sse.ts` — typed EventSource wrapper
 - `frontend/lib/api.ts` — fetch helpers
@@ -187,20 +210,94 @@ Three-pane layout:
 
 ## Implementation phases
 
-1. **Backend scaffold** — FastAPI app, SQLite schema, document upload + chunk pipeline wired to existing loader/chunker. *Deliverable: POST a PDF, GET back chunks.*
-2. **Async orchestrator** — LeadOrchestrator with tool use + dynamic SubAgent spawn via `asyncio.gather`. Prompt caching on chunks. Streaming. *Deliverable: end-to-end CLI run against the new async engine.*
-3. **SSE event bus** — wire agent events to `/stream`. *Deliverable: `curl` the stream and see live events.*
-4. **Frontend scaffold** — Next.js app, three-pane layout, session list, upload zone (no streaming yet).
-5. **Live chat + trace** — SSE consumer, streaming renderer, agent trace tree.
-6. **Artifacts + polish** — inline artifact cards, download, stop/resume, error states, loading skeletons.
-7. **Hardening** — auth (simple API key to start), rate limits, error surfaces, token-usage display, tests.
+Phases are split into **Phase A (build now)** — the core deep-reading assistant, sufficient as an end-state for the target use case — and **Phase B (build later, on-demand)** — additions triggered by specific user needs, not speculation.
+
+### Phase A — Build now (core deep-reading assistant)
+
+These phases deliver the complete value proposition for academic papers, policies, regulations, and compliance docs. Build in order; each produces a demoable deliverable.
+
+**A1. Backend scaffold**
+FastAPI app, SQLite schema (including FTS5), document upload + chunk pipeline wired to existing loader/chunker. Definition and cross-reference extractors run at ingest time.
+*Deliverable: POST a PDF, GET back chunks + extracted definitions + detected cross-refs.*
+
+**A2. Async orchestrator with citation enforcement**
+LeadOrchestrator with tool use + dynamic SubAgent spawn via `asyncio.gather`. Prompt caching on chunks. Streaming. Citation validation: subagent outputs rejected if claims lack chunk references.
+*Deliverable: end-to-end CLI run against the new async engine, every claim carries a citation.*
+
+**A3. Document-navigation tools**
+Implement `search_document` (SQLite FTS5, within-document only), `resolve_reference`, `lookup_definition`. Lead uses these instead of reading whole document linearly.
+*Deliverable: Lead efficiently answers "what does Section 4(2) say" without loading all chunks.*
+
+**A4. SSE event bus**
+Wire agent events to `/stream`.
+*Deliverable: `curl` the stream and see live events.*
+
+**A5. Frontend scaffold**
+Next.js app, three-pane layout, session list, upload zone (no streaming yet).
+
+**A6. Live chat + trace + citations**
+SSE consumer, streaming renderer, agent trace tree. **Citation links** render inline; clicking opens source drawer with the original passage highlighted.
+*Deliverable: user uploads a 200-page regulation, asks a question, sees cited answer, clicks citation to verify against source.*
+
+**A7. Audience-level rewrites**
+Layperson / professional / expert toggle per response. Subagent role varies system prompt by audience level.
+*Deliverable: same regulation passage explained three ways.*
+
+**A8. Structured extraction artifacts**
+Extract-to-table subagent (reuses existing SubAgent 3 concept). "List every obligation with section reference and penalty" → downloadable CSV/HTML.
+*Deliverable: compliance obligation table exported from a real regulation.*
+
+**A9. Hardening**
+Simple API key auth, rate limits, error surfaces, token-usage display, Stop/Resume, integration tests.
+
+At the end of Phase A, the system is a complete, useful deep-reading assistant. **Most users will never need anything beyond this.**
+
+### Phase B — Build later, triggered by specific user needs
+
+Do not build these speculatively. Each is triggered by an observed user request or bottleneck.
+
+**B1. Document comparison (trigger: "compare this Act with its amendment")**
+Load 2+ documents into one session; diff-aware subagent surfaces what changed, section by section. Mostly orchestration work — schema already supports multiple documents per session.
+
+**B2. Structured-data uploads (trigger: user tries to upload xlsx/csv)**
+Add **DuckDB** alongside SQLite for tabular data. New tool: `query_tables(sql)`. Text-to-SQL subagent for natural-language queries over uploaded spreadsheets. Use case: compliance checklists, datasets referenced by a policy doc.
+
+**B3. Within-document semantic search (trigger: FTS5 keyword search misses relevant passages)**
+Add embeddings *per document* using `sqlite-vec`. Still no vector DB — embeddings live in the same SQLite file, scoped to one document. `search_document` becomes hybrid (BM25 + vector). Only needed if keyword recall proves insufficient in practice.
+
+**B4. Cross-session document library (trigger: user says "I want to reuse documents I uploaded last week")**
+Decouple documents from sessions. Add a "library" view. Still no cross-document retrieval — just persistent per-document workspaces.
+
+**B5. Cross-document retrieval / true RAG (trigger: user says "find which of my 50 regulations mention X")**
+Only at this point does RAG become relevant. Add a real vector store (pgvector on Postgres is the natural migration — collapses relational + vector + FTS into one system). New tool: `search_corpus(query)` with document-level filters. This is a **major** shift — migrate off SQLite, add ingestion pipeline, embedding job queue.
+
+**B6. Object storage / scale (trigger: local disk fills up or deployment needs multi-instance)**
+Move uploaded files to S3/MinIO. Add Redis for cache and SSE session state. Split DB from app tier.
+
+**B7. Advanced stores (trigger: specific features demand them)**
+- **Graph DB** — only if users need cross-document entity relationships ("which contracts reference Company X *and* Clause 4.2"). Most deployments never need this.
+- **Dedicated audit log** (ClickHouse, etc.) — only at compliance/enterprise scale.
+
+### What's deliberately excluded
+
+- **Multi-user / team features** — single-user tool until a real collaboration request emerges.
+- **Mobile app** — web frontend is sufficient; reading 200-page PDFs on mobile is not the workflow.
+- **Offline mode** — Anthropic API is required; no local LLM fallback planned.
+- **Vector DB on day one** — per the Context section, premature for the depth-axis use case.
 
 ---
 
 ## Verification
 
-- **Unit**: chunker + loader tests (already exist); add orchestrator tool-handler tests with a mocked Anthropic client.
-- **Integration**: run a 200-page PDF through the full stack; assert subagent spawn, parallel execution, final artifact.
-- **Manual E2E**: upload a real document in the browser, issue a complex prompt ("extract all tables and summarize chapter 4"), watch the trace panel, verify artifacts download.
-- **Load**: run two long documents concurrently in separate sessions; confirm no cross-session leakage and SSE streams stay distinct.
+### Phase A verification
+
+- **Unit**: chunker + loader tests (already exist); add orchestrator tool-handler tests with a mocked Anthropic client; test citation-validation rejects uncited subagent output.
+- **Integration**: run a 200-page PDF (real policy or regulation) through the full stack; assert subagent spawn, parallel execution, final artifact, every claim has a valid citation.
+- **Manual E2E**: upload a real Act in the browser, ask "what obligations does this impose on small businesses," verify the returned table's citations each resolve to the correct sections when clicked.
+- **Audience levels**: same question answered at layperson/professional/expert — verify vocabulary and detail genuinely differ.
 - **Cache hit rate**: log `cache_read_input_tokens` — expect high hit rates on repeated subagent calls over the same document.
+- **Load**: run two long documents concurrently in separate sessions; confirm no cross-session leakage and SSE streams stay distinct.
+
+### Phase B verification (per feature, when built)
+
+Each Phase B feature ships with its own integration test proving the triggering user need is now served. No speculative test coverage — if the feature isn't built, the test isn't written.
