@@ -1,5 +1,5 @@
 """
-FastAPI application — deep-reading assistant backend.
+FastAPI application — Nebula backend.
 
 Endpoints:
   POST /api/sessions                          Create session
@@ -58,7 +58,7 @@ from backend.store.sessions import (
 from backend.extractors.definitions import extract_definitions
 from backend.extractors.cross_refs import extract_cross_refs
 
-app = FastAPI(title="Deep-Reading Assistant", version="1.0.0")
+app = FastAPI(title="Nebula", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

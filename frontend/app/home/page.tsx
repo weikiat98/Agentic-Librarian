@@ -227,7 +227,7 @@ export default function HomePage() {
                 <button
                   onClick={startChat}
                   disabled={submitting || (!input.trim() && pendingDocs.length === 0)}
-                  className="p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg transition"
+                  className="p-2 bg-white hover:bg-slate-200 disabled:opacity-40 text-slate-900 rounded-lg transition"
                   title="Start chat"
                 >
                   <Send className="w-4 h-4" />

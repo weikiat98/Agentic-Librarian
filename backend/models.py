@@ -1,5 +1,5 @@
 """
-Pydantic v2 schemas for the deep-reading assistant backend.
+Pydantic v2 schemas for the Nebula backend.
 """
 
 from __future__ import annotations

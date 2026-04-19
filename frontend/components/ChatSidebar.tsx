@@ -140,7 +140,7 @@ export default function ChatSidebar({ activeSessionId, defaultOpen = true }: Pro
           title="Home"
         >
           <BookOpen className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-semibold">Deep-Reading</span>
+          <span className="text-sm font-semibold">Nebula</span>
         </button>
         <button
           onClick={() => setOpen(false)}
@@ -155,7 +155,7 @@ export default function ChatSidebar({ activeSessionId, defaultOpen = true }: Pro
       <div className="px-3 pt-3">
         <button
           onClick={newChat}
-          className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-sm font-medium transition"
         >
           <Plus className="w-4 h-4" /> New chat
         </button>

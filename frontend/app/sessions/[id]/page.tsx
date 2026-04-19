@@ -330,8 +330,8 @@ export default function SessionPage() {
               />
             ) : (
               <>
-                <span className="text-sm text-slate-400 truncate" title={session?.title || "Deep-Reading Session"}>
-                  {session?.title || "Deep-Reading Session"}
+                <span className="text-sm text-slate-400 truncate" title={session?.title || "Nebula Session"}>
+                  {session?.title || "Nebula Session"}
                 </span>
                 <button
                   onClick={() => { setTitleDraft(session?.title || ""); setEditingTitle(true); }}

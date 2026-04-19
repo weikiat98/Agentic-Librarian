@@ -1,5 +1,5 @@
 /**
- * Typed API helpers for the deep-reading assistant backend.
+ * Typed API helpers for the Nebula backend.
  */
 
 const BASE = "/api";

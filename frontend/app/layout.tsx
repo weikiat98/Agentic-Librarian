@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Deep-Reading Assistant",
+  title: "Nebula",
   description: "Multi-agent document analysis for legal, policy, and academic texts",
 };
 

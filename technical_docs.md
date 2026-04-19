@@ -1,6 +1,6 @@
-# Technical Documentation — Deep-Reading Assistant
+# Technical Documentation — Nebula
 
-Comprehensive technical reference for developers information with the Deep-Reading Assistant. For a user-facing guide see [README.md](README.md); for a higher-level architectural overview see [ARCHITECTURE.md](ARCHITECTURE.md).
+Comprehensive technical reference for developers working with Nebula. For a user-facing guide see [README.md](README.md); for a higher-level architectural overview see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -45,7 +45,7 @@ Comprehensive technical reference for developers information with the Deep-Readi
 
 ## 1. System overview
 
-The Deep-Reading Assistant is a three-tier application:
+Nebula is a three-tier application:
 
 1. **Frontend** — Next.js 15 App Router + React 19 + Tailwind. Single-page experience across Splash (`/`), Home (`/home`), and Session (`/sessions/[id]`).
 2. **Backend** — FastAPI running on `uvicorn`, exposing REST + Server-Sent Events (SSE). All I/O is async; SQLite access goes through `aiosqlite`.
@@ -318,7 +318,7 @@ Both extractors are best-effort and run after ingest. A failure does not block t
 
 | Route | File | Purpose |
 | --- | --- | --- |
-| `/` | [frontend/app/page.tsx](frontend/app/page.tsx) | Splash with START button → `/home`. |
+| `/` | [frontend/app/page.tsx](frontend/app/page.tsx) | Splash with crossfading backdrop slideshow (6 s interval, 2 s fade; images from [frontend/public/splash/](frontend/public/splash/)) + dark gradient overlay + white START button → `/home`. |
 | `/home` | [frontend/app/home/page.tsx](frontend/app/home/page.tsx) | Greeting + audience toggle + draft upload + prompt bar. |
 | `/sessions/[id]` | [frontend/app/sessions/[id]/page.tsx](frontend/app/sessions/%5Bid%5D/page.tsx) | Chat, trace, artifact preview, source drawer. |
 

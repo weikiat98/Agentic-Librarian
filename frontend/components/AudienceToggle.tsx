@@ -23,7 +23,7 @@ export default function AudienceToggle({ value, onChange }: Props) {
           title={opt.desc}
           className={`px-3 py-1 rounded text-xs font-medium transition ${
             value === opt.value
-              ? "bg-blue-600 text-white"
+              ? "bg-white text-slate-900"
               : "text-slate-400 hover:text-slate-200"
           }`}
         >

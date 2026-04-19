@@ -1,8 +1,8 @@
-# Architecture — Deep-Reading Assistant
+# Architecture — Nebula
 
 ## Overview
 
-The Deep-Reading Assistant is a full-stack multi-agent system optimised for deep analysis of a known document (legal Acts, regulations, academic papers, compliance frameworks), not corpus-wide retrieval. The architecture is split into three layers: **Frontend**, **Backend API**, and **Agent Orchestration**.
+Nebula is a full-stack multi-agent system optimised for deep analysis of a known document (legal Acts, regulations, academic papers, compliance frameworks), not corpus-wide retrieval. The architecture is split into three layers: **Frontend**, **Backend API**, and **Agent Orchestration**.
 
 ---
 

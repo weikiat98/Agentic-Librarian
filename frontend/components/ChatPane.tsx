@@ -343,7 +343,7 @@ export default function ChatPane({
               <button
                 onClick={submit}
                 disabled={!input.trim()}
-                className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition shrink-0 disabled:opacity-40"
+                className="p-2 bg-white hover:bg-slate-200 text-slate-900 rounded-lg transition shrink-0 disabled:opacity-40"
               >
                 <Send className="w-4 h-4" />
               </button>

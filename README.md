@@ -1,4 +1,4 @@
-# Deep-Reading Assistant
+# Nebula
 
 A full-stack multi-agent system for deep analysis of lengthy and technical documents — legal regulations, academic papers, compliance frameworks, and policy documents — powered by the Anthropic API.
 
@@ -104,7 +104,7 @@ All three roles read from the `ANTHROPIC_MODEL` environment variable. Setting it
 ## Project structure
 
 ```text
-deep-reading-assistant/
+nebula/
 │
 ├── backend/                          # FastAPI application (v1.0.0)
 │   ├── app.py                        # Routes: sessions, documents, messages, SSE, trace, artifacts
@@ -228,7 +228,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-> The terminal prints `deep-reading-assistant@2.0.0 dev` — that's the package name and version from [frontend/package.json](frontend/package.json), not a warning.
+> The terminal prints `nebula@2.0.0 dev` — that's the package name and version from [frontend/package.json](frontend/package.json), not a warning.
 
 ### 5. Stop the servers
 
@@ -242,7 +242,7 @@ A complete session, from splash to cited answer:
 
 ### Step 1 — Splash → Home
 
-The splash page (`/`) shows the project title and a **START** button. Clicking START takes you to `/home`, which is the greeting page with the main prompt bar.
+The splash page (`/`) shows the **Nebula** title and a **START** button over a crossfading backdrop slideshow (6-second interval, 2-second fade) with a dark gradient overlay for legibility. Swap or extend the imagery by dropping new `.jpg` / `.webp` files into [frontend/public/splash/](frontend/public/splash/) and adding their paths to the `SLIDES` array in [frontend/app/page.tsx](frontend/app/page.tsx). Clicking START takes you to `/home`, the greeting page with the main prompt bar.
 
 ### Step 2 — Upload a document (optional, on the home page)
 
