@@ -152,12 +152,12 @@ LEAD_TOOLS: list[dict] = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The artifact content (Markdown, HTML, or CSV).",
+                    "description": "The artifact content (Markdown, HTML, CSV, or plain text).",
                 },
                 "mime_type": {
                     "type": "string",
-                    "description": "MIME type: 'text/markdown', 'text/html', or 'text/csv'.",
-                    "enum": ["text/markdown", "text/html", "text/csv"],
+                    "description": "MIME type: 'text/markdown', 'text/html', 'text/csv', or 'text/plain'.",
+                    "enum": ["text/markdown", "text/html", "text/csv", "text/plain"],
                     "default": "text/markdown",
                 },
                 "citations": {

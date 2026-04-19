@@ -54,6 +54,7 @@ export default function SessionPage() {
   const [traceEntries, setTraceEntries] = useState<TraceEntry[]>([]);
 
   const [streamingText, setStreamingText] = useState("");
+  const [thinkingText, setThinkingText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [audience, setAudience] = useState<Audience>("professional");
   const [liveContextPercent, setLiveContextPercent] = useState<number | undefined>();
@@ -69,16 +70,33 @@ export default function SessionPage() {
 
   const attachStream = useCallback(() => {
     setStreamingText("");
+    setThinkingText("");
     setIsStreaming(true);
-    let accumulated = "";
+    let accumulatedThinking = "";
+    let accumulatedText = "";
+    // Artifacts produced *during this run* — attached to the assistant
+    // message that the run commits, so the inline artifact row only shows
+    // the files generated for that specific user query (not every artifact
+    // in the session).
+    const runArtifactIds: string[] = [];
 
     const unsubscribe = subscribeToStream(
       sessionId,
       (event: SSEEvent) => {
         switch (event.type) {
+          case "thinking_delta":
+            accumulatedThinking += event.delta;
+            setThinkingText(accumulatedThinking);
+            break;
           case "text_delta":
-            accumulated += event.delta;
-            setStreamingText(accumulated);
+            // Legacy path: if any agent still publishes plain text_delta,
+            // treat it as streaming content (kept for forward compatibility).
+            accumulatedText += event.delta;
+            setStreamingText(accumulatedText);
+            break;
+          case "final_message":
+            accumulatedText = event.content;
+            setStreamingText(event.content);
             break;
           case "agent_spawned":
             setTraceEntries((p) => [...p, { id: uid(), type: "agent_spawned", timestamp: Date.now(), agent_id: event.agent_id, role: event.role }]);
@@ -87,6 +105,7 @@ export default function SessionPage() {
             setTraceEntries((p) => [...p, { id: uid(), type: "tool_use", timestamp: Date.now(), agent_id: event.agent_id, tool: event.tool, input: event.input }]);
             break;
           case "artifact_written":
+            runArtifactIds.push(event.artifact_id);
             setTraceEntries((p) => [...p, { id: uid(), type: "artifact_written", timestamp: Date.now(), artifact_id: event.artifact_id, artifact_name: event.name }]);
             // Reload artifacts list and auto-open the newest in the canvas.
             api.getSession(sessionId).then((d) => {
@@ -105,21 +124,52 @@ export default function SessionPage() {
             setTraceEntries((p) => [...p, { id: uid(), type: "compaction_done", timestamp: Date.now(), before_tokens: event.before_tokens, after_tokens: event.after_tokens }]);
             break;
           case "run_complete":
-            setMessages((prev) => [...prev, { id: uid(), role: "assistant", content: accumulated }]);
+            if (accumulatedText) {
+              const thinkingSnapshot = accumulatedThinking;
+              const artifactSnapshot = [...runArtifactIds];
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: uid(),
+                  role: "assistant",
+                  content: accumulatedText,
+                  thinking: thinkingSnapshot || undefined,
+                  artifactIds: artifactSnapshot.length ? artifactSnapshot : undefined,
+                },
+              ]);
+              accumulatedText = "";
+              accumulatedThinking = "";
+            }
             setStreamingText("");
+            setThinkingText("");
             setIsStreaming(false);
             break;
           case "error":
             setMessages((prev) => [...prev, { id: uid(), role: "assistant", content: `Error: ${event.message}` }]);
+            accumulatedText = "";
+            accumulatedThinking = "";
             setStreamingText("");
+            setThinkingText("");
             setIsStreaming(false);
             break;
         }
       },
       () => {
-        if (accumulated) {
-          setMessages((prev) => [...prev, { id: uid(), role: "assistant", content: accumulated }]);
+        if (accumulatedText) {
+          const thinkingSnapshot = accumulatedThinking;
+          const artifactSnapshot = [...runArtifactIds];
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "assistant",
+              content: accumulatedText,
+              thinking: thinkingSnapshot || undefined,
+              artifactIds: artifactSnapshot.length ? artifactSnapshot : undefined,
+            },
+          ]);
           setStreamingText("");
+          setThinkingText("");
         }
         setIsStreaming(false);
       }
@@ -155,7 +205,12 @@ export default function SessionPage() {
         setMessages((prev) => [...prev, { id: uid(), role: "user", content: promptParam, attachedDocs: detail.documents.map((d) => d.filename) }]);
         attachStream();
         api.sendMessage(sessionId, promptParam, chosenAud)
-          .then(() => api.getSession(sessionId).then((d) => setSession(d.session)).catch(() => {}))
+          .then(() =>
+            api.getSession(sessionId).then((d) => {
+              setSession(d.session);
+              window.dispatchEvent(new CustomEvent("sessions-changed"));
+            }).catch(() => {})
+          )
           .catch(() => {
             setIsStreaming(false);
             stopRef.current?.();
@@ -170,8 +225,12 @@ export default function SessionPage() {
     attachStream();
     try {
       await api.sendMessage(sessionId, text, audience);
-      // Refresh session so auto-generated title appears in the header.
-      api.getSession(sessionId).then((d) => setSession(d.session)).catch(() => {});
+      // Refresh session so the auto-generated title shows up in both the
+      // header and the sidebar without requiring a page reload.
+      api.getSession(sessionId).then((d) => {
+        setSession(d.session);
+        window.dispatchEvent(new CustomEvent("sessions-changed"));
+      }).catch(() => {});
     } catch {
       setIsStreaming(false);
       stopRef.current?.();
@@ -186,6 +245,7 @@ export default function SessionPage() {
       setMessages((prev) => [...prev, { id: uid(), role: "assistant", content: streamingText + " [stopped]" }]);
       setStreamingText("");
     }
+    setThinkingText("");
   }
 
   async function handleCompact() {
@@ -311,6 +371,7 @@ export default function SessionPage() {
             sessionId={sessionId}
             messages={messages}
             streamingText={streamingText}
+            thinkingText={thinkingText}
             artifacts={artifacts}
             documents={documents}
             isStreaming={isStreaming}

@@ -1,86 +1,103 @@
 # Deep-Reading Assistant
 
-A full-stack multi-agentic system for deep analysis of lengthy and technical documents, ranging from legal regulations, academic papers to compliance frameworks using Anthropic API
+A full-stack multi-agent system for deep analysis of lengthy and technical documents — legal regulations, academic papers, compliance frameworks, and policy documents — powered by the Anthropic API.
 
-Every agent output cites its source. Every claim is verifiable.
+Every claim in every answer carries a citation. Every citation is clickable. Every source is verifiable.
+
+> **Version 2.0** — This release is a full rewrite. See [CHANGELOG.md](CHANGELOG.md) for the full list of changes against the original synchronous prototype.
 
 ---
 
 ## Table of contents
 
 - [What it does](#what-it-does)
+- [What's new in 2.0](#whats-new-in-20)
 - [Simplified architecture](#simplified-architecture)
 - [Models and cost architecture](#models-and-cost-architecture)
 - [Project structure](#project-structure)
 - [Requirements](#requirements)
 - [Environment variables](#environment-variables)
 - [Setup](#setup)
-- [End-to-end walkthrough](#end-to-end-walkthrough)
+- [Using the app](#using-the-app)
 - [CLI usage](#cli-usage)
-- [How it works](#how-it-works)
 - [Troubleshooting](#troubleshooting)
-- [API reference](#api-reference)
-- [SSE event types](#sse-event-types)
 - [Supported document formats](#supported-document-formats)
-- [Future phases](#future-phases-phase-b)
+- [Further reading](#further-reading)
 
 ---
 
 ## What it does
 
-When a user uploads a PDF, DOCX, or text document and asks questions in natural language, a Lead Orchestrator spawns specialised subagents in parallel, each working on a focused subtask with access only to the chunks it needs. The results provided by the sub-agents are synthesised and returned with inline citations by the Lead Orchestrator. The user can click inline citations to verify against the original text. The main objectives of this deep reading assistant are as such:
+Upload a PDF, DOCX, or text document and ask questions in natural language. A **Lead Orchestrator** plans the work, then spawns specialised **subagents** in parallel — each handed only the chunks it needs for its focused subtask. Results are synthesised and returned with inline citations that open the exact source passage.
 
-1. **Understandable**: plain-language rewrites at adjustable expertise levels (layperson / professional / expert).
+Four product goals shape every feature:
 
-2. **Navigable**: cross-reference resolution, glossary lookup, FTS5 keyword search within the document.
-
-3. **Verifiable**: every factual claim links back to its source chunk. Subagent output without citations is flagged and rejected.
-
-4. **Actionable**: extract obligations, findings, and comparisons into downloadable artifacts (Markdown, HTML, CSV).
+1. **Understandable** — plain-language rewrites at three expertise levels (layperson / professional / expert).
+2. **Navigable** — FTS5 keyword search, cross-reference resolution, and defined-term lookup inside the document.
+3. **Verifiable** — every factual claim links back to its source chunk. Subagent output missing citations is flagged and rejected.
+4. **Actionable** — structured deliverables (obligation tables, comparisons, summaries) are persisted as downloadable artifacts (Markdown, HTML, CSV).
 
 ---
 
-## Simplified Architecture
+## What's new in 2.0
+
+- **Splash → Home → Session flow** — a three-page app: landing splash, a home screen with greeting + draft upload, and per-session chat pages.
+- **Persistent chat sidebar** — list, pin, rename, and delete sessions; titles auto-generated from the first user message.
+- **Edit / retry** — edit a prior user message or retry any assistant reply; the backend truncates history cleanly before re-running.
+- **Thinking panel** — the Lead's and subagents' reasoning stream as a collapsible "Thinking…" block, separate from the final answer.
+- **Artifact preview canvas** — artifacts render inline in a slide-in pane with Markdown/HTML/CSV support, not as a raw download.
+- **Persistent agent trace** — tool calls, agent spawns, and compaction events survive page reloads and session switches.
+- **Draft sessions** — drop files on the home screen before composing a prompt; a draft session is created lazily.
+- **Drag-and-drop everywhere** — both the home screen and session pages accept dropped files.
+- **Stable `final_message` contract** — the user-facing answer ships as a single SSE event, cleanly separated from streaming reasoning.
+- **Full async backend** — the original synchronous `LibrarianAgentsTeam` prototype has been removed; the CLI now drives the same async orchestrator as the web app.
+
+---
+
+## Simplified architecture
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
 │  Frontend  (Next.js 15 + React 19 + Tailwind + shadcn/ui)  │
-│  - Three-pane: Sessions | Chat + Artifacts | Agent Trace   │
+│  - Splash → Home → Session                                 │
+│  - Sidebar | Chat + Thinking | Trace | Artifact canvas     │
 │  - SSE consumer, streaming renderer, citation drawer       │
 │  - Audience toggle, context meter, drag-and-drop upload    │
 └──────────────────────────────▲─────────────────────────────┘
-                               │  HTTPS + SSE
+                               │  HTTPS + SSE (direct to :8000)
 ┌──────────────────────────────▼─────────────────────────────┐
-│  Backend  (FastAPI + async uvicorn)                        │
+│  Backend  (FastAPI + async uvicorn, v1.0.0)                │
 │  - REST: /sessions, /documents, /messages, /artifacts      │
 │  - SSE: /sessions/{id}/stream                              │
-│  - SQLite (sessions, chunks, FTS5, definitions, artifacts) │
+│  - Persisted trace: /sessions/{id}/trace                   │
+│  - SQLite (sessions, chunks, FTS5, definitions, artifacts, │
+│    agent_runs, trace_events)                               │
 └──────────────────────────────▲─────────────────────────────┘
                                │
 ┌──────────────────────────────▼─────────────────────────────┐
 │  Agent Orchestration  (anthropic SDK, async)               │
-│  - LeadOrchestrator: tool-use loop + compaction            │
+│  - LeadOrchestrator: tool-use loop + compaction + finalize │
 │  - SubAgents: spawned dynamically, parallel via gather     │
 │  - Prompt caching on document chunks (1 h TTL)             │
 │  - Citation enforcement: rejects uncited subagent output   │
 └────────────────────────────────────────────────────────────┘
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed component documentation.
+Full technical reference: [technical_docs.md](technical_docs.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
 ## Models and cost architecture
 
-The system uses **two different Claude models** for a deliberate cost/quality tradeoff:
+The system uses two Claude models deliberately for a cost/quality tradeoff:
 
 | Role | Default model | Rationale |
 | --- | --- | --- |
-| Lead Orchestrator (`lead.py`) | `claude-opus-4-6` | High-capability reasoning, tool-use orchestration, synthesis |
-| SubAgents (`subagent.py`) | `claude-haiku-4-5-20251001` | Fast and cheap; each subagent does a narrow, citation-bounded task |
-| Compactor (`compactor.py`) | `claude-haiku-4-5-20251001` | Context summarisation — no complex reasoning needed |
+| Lead Orchestrator (`lead.py`) | `claude-haiku-4-5-20251001` *(dev default)* / `claude-opus-4-6` *(production)* | Reasoning, tool-use orchestration, synthesis. Swap to Opus for production-grade answers. |
+| SubAgents (`subagent.py`) | `claude-haiku-4-5-20251001` | Fast and cheap; each subagent does a narrow, citation-bounded task. |
+| Compactor (`compactor.py`) | `claude-haiku-4-5-20251001` | Context summarisation — no complex reasoning needed. |
 
-Both defaults can be overridden with the `ANTHROPIC_MODEL` environment variable (see [Environment variables](#environment-variables)). Setting `ANTHROPIC_MODEL` changes **all three roles** to the same model — useful for cost control or testing, but will reduce Lead quality if set to Haiku.
+All three roles read from the `ANTHROPIC_MODEL` environment variable. Setting it overrides **all three** to the same model — useful for strict cost control or smoke tests, but will reduce Lead quality if set to Haiku in production.
 
 ---
 
@@ -89,62 +106,63 @@ Both defaults can be overridden with the `ANTHROPIC_MODEL` environment variable 
 ```text
 deep-reading-assistant/
 │
-├── backend/                        # FastAPI application
-│   ├── app.py                      # Routes: sessions, documents, messages, SSE, artifacts
-│   ├── models.py                   # Pydantic v2 schemas
+├── backend/                          # FastAPI application (v1.0.0)
+│   ├── app.py                        # Routes: sessions, documents, messages, SSE, trace, artifacts
+│   ├── models.py                     # Pydantic v2 schemas
 │   ├── orchestrator/
-│   │   ├── lead.py                 # LeadOrchestrator agentic loop (claude-opus-4-6)
-│   │   ├── subagent.py             # SubAgent runner (claude-haiku-4-5-20251001, parallel)
-│   │   ├── tools.py                # Tool definitions + handlers
-│   │   ├── event_bus.py            # Per-session SSE pub/sub
-│   │   └── compactor.py            # Lead-context compaction (claude-haiku-4-5-20251001)
+│   │   ├── lead.py                   # LeadOrchestrator agentic loop
+│   │   ├── subagent.py               # SubAgent runner (parallel via asyncio.gather)
+│   │   ├── tools.py                  # Lead tool schemas + handlers
+│   │   ├── event_bus.py              # Per-session SSE pub/sub + trace persistence
+│   │   └── compactor.py              # 85%-threshold Lead-context compaction
 │   ├── store/
-│   │   ├── sessions.py             # SQLite: sessions, messages, chunks, artifacts
-│   │   └── documents.py            # DocumentStore (ingest → chunk → FTS index)
+│   │   ├── sessions.py               # SQLite: sessions, messages, chunks, FTS5, artifacts, trace_events
+│   │   └── documents.py              # DocumentStore (ingest → chunk → FTS index)
 │   └── extractors/
-│       ├── definitions.py          # Defined-term extractor (legal/policy patterns)
-│       └── cross_refs.py           # Section cross-reference detector
+│       ├── definitions.py            # Defined-term extractor
+│       └── cross_refs.py             # Section cross-reference detector
 │
-├── frontend/                       # Next.js 15 application
+├── frontend/                         # Next.js 15 application (v2.0.0)
 │   ├── app/
 │   │   ├── layout.tsx
-│   │   ├── page.tsx                # Home: session list + new session
-│   │   └── sessions/[id]/page.tsx  # Main chat view (three-pane)
+│   │   ├── page.tsx                  # Splash page
+│   │   ├── home/page.tsx             # Home: greeting + draft upload + prompt bar
+│   │   └── sessions/[id]/page.tsx    # Chat view with trace, artifact canvas, source drawer
 │   ├── components/
-│   │   ├── ChatPane.tsx            # Streaming chat with inline citation links
-│   │   ├── AgentTrace.tsx          # Live agent event tree (collapsible)
-│   │   ├── UploadZone.tsx          # Drag-and-drop file upload
-│   │   ├── ArtifactCard.tsx        # Inline artifact with download button
-│   │   ├── CitationLink.tsx        # Clickable [chunk_id] citation
-│   │   ├── SourceDrawer.tsx        # Slide-in drawer showing source passage
-│   │   ├── AudienceToggle.tsx      # Layperson / Professional / Expert selector
-│   │   └── ContextMeter.tsx        # Live token-usage bar + Compact button
+│   │   ├── ChatSidebar.tsx           # Pin/rename/delete sessions
+│   │   ├── ChatPane.tsx              # Streaming chat + thinking + retry/edit
+│   │   ├── AgentTrace.tsx            # Live agent event tree (collapsible)
+│   │   ├── AgentTracePanel.tsx       # Dock panel for trace
+│   │   ├── UploadZone.tsx            # Drag-and-drop upload
+│   │   ├── ArtifactCard.tsx          # Inline artifact row
+│   │   ├── ArtifactPreview.tsx       # Slide-in artifact canvas (MD/HTML/CSV)
+│   │   ├── CitationLink.tsx          # Clickable [chunk_id]
+│   │   ├── SourceDrawer.tsx          # Slide-in passage viewer
+│   │   ├── AudienceToggle.tsx        # Layperson / Professional / Expert
+│   │   ├── ContextMeter.tsx          # Token-usage bar + Compact button
+│   │   └── SessionFiles.tsx          # Per-session files menu
 │   └── lib/
-│       ├── api.ts                  # Typed fetch helpers
-│       └── sse.ts                  # Typed EventSource wrapper
+│       ├── api.ts                    # Typed fetch helpers
+│       ├── sse.ts                    # Typed EventSource wrapper
+│       └── citations.ts              # Citation parsing/rendering helpers
 │
-├── document_loader.py              # Multi-format document loader (PDF, DOCX, TXT, MD, HTML)
-├── document_chunker.py             # Intelligent chunker (pages, chapters, sections)
-├── cli.py                          # CLI — standalone, no backend server required
-├── requirements.txt                # Python dependencies
-│
-├── librarian_agents_team.py        # Original synchronous prototype (kept for reference)
-├── advanced_examples.py            # Scenario demos using the original sync prototype
-└── test_example.py                 # Full workflow demo using the original sync prototype
+├── document_loader.py                # Multi-format loader (PDF, DOCX, TXT, MD, HTML)
+├── document_chunker.py               # Intelligent chunker (pages, chapters, sections)
+├── cli.py                            # CLI driving the same async orchestrator (no server required)
+├── requirements.txt                  # Python dependencies
+├── README.md                         # This file
+├── technical_docs.md                 # Comprehensive technical documentation
+├── CHANGELOG.md                      # Version history
+├── ARCHITECTURE.md                   # Deep architecture notes
+└── PLAN.md                           # Roadmap and design rationale
 ```
 
 ---
 
 ## Requirements
 
-### Backend
-
-- Python 3.11+
-- `ANTHROPIC_API_KEY` environment variable
-
-### Frontend
-
-- Node.js 20+
+- **Backend** — Python 3.11+, an `ANTHROPIC_API_KEY`.
+- **Frontend** — Node.js 20+.
 
 ---
 
@@ -152,10 +170,11 @@ deep-reading-assistant/
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Yes | — | Your Anthropic API key. Obtain one at [console.anthropic.com](https://console.anthropic.com). |
-| `ANTHROPIC_MODEL` | No | see below | Override the Claude model for all agent roles. Defaults to `claude-opus-4-6` for the Lead and `claude-haiku-4-5-20251001` for subagents and the compactor. Setting this variable applies the same model to all three. |
+| `ANTHROPIC_API_KEY` | Yes | — | Your Anthropic API key. Get one at [console.anthropic.com](https://console.anthropic.com). |
+| `ANTHROPIC_MODEL` | No | `claude-haiku-4-5-20251001` | Overrides the model used by Lead, SubAgent, and Compactor. For production Lead quality, set to `claude-opus-4-6` (or leave the value in `lead.py` and keep Haiku for the other two). |
+| `NEXT_PUBLIC_SSE_BASE` | No | `http://<host>:8000` | Base URL the browser uses to connect to the SSE stream. Useful when the backend runs on a non-default host/port. |
 
-Example — run everything on Haiku for minimal cost (lower quality):
+Example — run everything on Haiku to minimise cost (lower Lead quality):
 
 ```bash
 export ANTHROPIC_MODEL=claude-haiku-4-5-20251001
@@ -171,17 +190,17 @@ export ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 pip install -r requirements.txt
 ```
 
-**Optional dependencies:** `PyPDF2` (PDF support) and `python-docx` (DOCX support) are listed in `requirements.txt` and installed by default. If either is missing, loading those file types will fail with an `ImportError`. Plain-text, Markdown, and HTML files work without them.
+`PyPDF2` and `python-docx` are installed by default. TXT / Markdown / HTML work without them.
 
-### 2. Set environment variables
+### 2. Set the API key
 
-#### Linux / macOS
+On Linux / macOS:
 
 ```bash
 export ANTHROPIC_API_KEY='your-key-here'
 ```
 
-#### Windows
+On Windows:
 
 ```bat
 setx ANTHROPIC_API_KEY "your-key-here"
@@ -191,9 +210,7 @@ Then restart your terminal.
 
 ### 3. Start the backend
 
-> **Important:** run this command from the **repo root**, not from inside `backend/`.
->
-> The app is structured as a Python package: `backend/` contains an `__init__.py`, so its modules import each other as `from backend.orchestrator.lead import ...`. When you run `uvicorn` from the repo root, Python adds the repo root to `sys.path`, which means `backend` is a discoverable package. If you `cd backend` first and then run `uvicorn app:app`, Python sees the current directory (`backend/`) on the path instead — there is no `backend` package visible from there, so every cross-module import fails with `ModuleNotFoundError: No module named 'backend'`.
+> **Run from the repo root**, not from inside `backend/`. The project is structured as a Python package (`backend/__init__.py`); running `uvicorn` from the repo root puts the root on `sys.path` so `from backend.orchestrator.lead import ...` resolves. Running it from `backend/` causes `ModuleNotFoundError: No module named 'backend'`.
 
 ```bash
 uvicorn backend.app:app --reload --port 8000
@@ -211,108 +228,85 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### 5. Close the frontend and Backend
+> The terminal prints `deep-reading-assistant@2.0.0 dev` — that's the package name and version from [frontend/package.json](frontend/package.json), not a warning.
 
-Press Ctrl + C to close both the frontend and backend
+### 5. Stop the servers
 
+Press `Ctrl+C` in each terminal.
 
 ---
 
-## End-to-end walkthrough
+## Using the app
 
-This section shows what a full session looks like, from document upload to cited answer.
+A complete session, from splash to cited answer:
 
-### Step 1 — Upload a document
+### Step 1 — Splash → Home
 
-In the web UI: open a new session, drag your PDF/DOCX/TXT onto the upload zone.
+The splash page (`/`) shows the project title and a **START** button. Clicking START takes you to `/home`, which is the greeting page with the main prompt bar.
 
-In the backend, this triggers:
+### Step 2 — Upload a document (optional, on the home page)
 
-- The file is loaded, chunked (~8000 chars/chunk), and stored in SQLite with an FTS5 full-text index.
-- Defined terms (e.g. "Licensee", "Effective Date") are extracted automatically.
-- Internal cross-references (e.g. "see Section 4.2") are detected and indexed.
+Drag a PDF / DOCX / TXT / MD / HTML onto the home screen, or click the **+** button and choose "Upload files". A **draft session** is created on first upload so the file has somewhere to live. You can attach multiple documents before sending.
 
-### Step 2 — Ask a question
+Behind the scenes the upload triggers:
 
-Type your question in the chat pane. The backend's `/api/sessions/{id}/messages` endpoint starts the agent run.
+- File load + intelligent chunking (~8000 chars/chunk).
+- Chunks stored in SQLite with an FTS5 full-text index.
+- Definition and cross-reference extraction run as background tasks.
 
-**What you see in the UI:**
+### Step 3 — Ask a question
 
-- The Agent Trace pane (right) lights up with `agent_spawned` events as the Lead and subagents start.
-- The Context Meter bar shows token usage growing in real time.
-- Tool-use events appear in the trace (`search_document`, `spawn_subagent`, etc.).
+Type your question and hit Enter (or click the send button). The app navigates to `/sessions/<id>` and starts streaming. The session title is auto-generated from the first line of your prompt.
+
+**What you see:**
+
+- **Chat pane** — streaming final answer with inline `[chunk_id]` citations.
+- **Thinking panel** — collapsible; shows Lead and subagent reasoning as it happens.
+- **Agent Trace** — live tree of agent spawns, tool calls, artifact writes, and compaction events.
+- **Context Meter** — token usage bar. A Compact button lets you trigger manual compaction.
+- **Artifact Preview** — when the Lead calls `write_artifact`, the result slides in as a canvas beside the chat.
 
 **What happens inside:**
 
 1. The Lead receives your question plus a 50-chunk index of the document.
-2. It searches and reads chunks to understand structure.
-3. It spawns 2–5 subagents in parallel, each assigned a focused subtask (e.g. "extract obligations in §3", "find definitions in §1").
-4. Subagents run concurrently via `asyncio.gather`, each with only the chunk IDs it needs.
-5. The Lead validates that every subagent result contains `[chunk_id]` citations; uncited results are flagged.
-6. The Lead synthesises all results and calls `finalize` with the cited answer.
+2. It uses `search_document` / `read_document_chunk` to explore structure.
+3. It spawns 2–5 subagents in parallel via `spawn_subagent` — each gets only the chunk IDs it needs.
+4. Subagents run concurrently (`asyncio.gather`). Every result must carry `[chunk_id]` citations; uncited output is flagged.
+5. The Lead synthesises, optionally calls `write_artifact`, and ends with `finalize`.
 
-### Step 3 — Read the answer and verify claims
+### Step 4 — Verify claims
 
-- Inline `[chunk_id]` citations are rendered as clickable links.
-- Clicking a citation opens the Source Drawer with the exact passage from the document.
-- Any generated artifacts (tables, obligation lists) appear as `ArtifactCard` components with a download button.
+Click any inline `[chunk_id]` citation — a **Source Drawer** slides in with the exact passage, section, and page. Click an artifact row to open it in the preview canvas.
 
-### Step 4 — Long sessions: automatic compaction
+### Step 5 — Iterate
 
-If the Lead's context reaches 85% of the 200K token window, compaction fires automatically:
-
-- Earlier turns are condensed into a structured summary by the Haiku compactor.
-- A `compaction_done` event updates the Context Meter.
-- The session continues without interruption or data loss.
+- **Retry** an assistant reply — truncates history at that point and re-runs.
+- **Edit** a user message — truncates, rewrites, re-runs.
+- **Rename** the session via the pencil icon in the header.
+- **Pin** sessions from the sidebar.
+- **Compact** long sessions manually, or let it fire automatically at 85% of the 200K window.
 
 ---
 
 ## CLI usage
 
-The CLI runs the async orchestrator **directly** — it does **not** require the FastAPI backend or any server to be running. It is fully self-contained and uses the same SQLite store.
+The CLI drives the **same async orchestrator** as the web app — no FastAPI server required, same SQLite store.
 
 ```bash
 # Single question
 python cli.py -i regulation.pdf -r "What obligations does this impose on small businesses?"
 
-# Save answer to file
+# Save answer to a file
 python cli.py -i policy.pdf -r "Summarise Part 3" -o summary.md
 
-# Interactive Q&A mode with audience level
+# Interactive Q&A with an audience level
 python cli.py -i act.pdf --interactive --audience layperson
 
-# Verbose: show agent event trace
+# Verbose: show the agent event trace
 python cli.py -i paper.pdf -r "What are the main findings?" --verbose
 ```
 
-Audience options: `layperson` | `professional` (default) | `expert`
-
----
-
-## Reference files: advanced_examples.py and test_example.py
-
-Both files demonstrate the **original synchronous prototype** (`librarian_agents_team.py`), not the current async orchestrator. They are useful as:
-
-- **`advanced_examples.py`** — five scenario demos (large document summary, cross-reference resolution, multi-topic analysis, glossary extraction, comparative analysis). Run any function directly to see how the prototype handles a given task type.
-- **`test_example.py`** — a full end-to-end workflow demo: creates a sample multi-chapter document, ingests it, runs several queries, and prints results. Useful as a smoke-test for the document loader and chunker in isolation.
-
-To run either against the **current** system, replace the `LibrarianAgentsTeam` import with calls to `run_lead` from `backend.orchestrator.lead` and adapt the async interface. Neither file is wired to the new backend by default.
-
----
-
-## How it works
-
-1. **Ingest** — uploaded document is loaded, chunked, and indexed in SQLite with FTS5. Definition patterns and internal cross-references are extracted automatically.
-
-2. **Lead Orchestrator** — receives the user's question and a chunk index. Uses tools (`search_document`, `resolve_reference`, `lookup_definition`, `read_document_chunk`) to navigate the document. Spawns specialised subagents for focused subtasks.
-
-3. **SubAgents** — each runs a fresh Messages API call with an isolated context window containing only the chunks it needs. Prompt caching (1 h TTL) keeps repeated calls cheap. Every output must carry `[chunk_id]` citations.
-
-4. **Parallelism** — independent subagents run via `asyncio.gather`. The Lead waits, validates citations, then synthesises.
-
-5. **Streaming** — text deltas, tool calls, agent spawns, and artifact writes are pushed to the frontend via SSE in real time.
-
-6. **Compaction** — when the Lead's context reaches 85% of 200K tokens, earlier turns are condensed into a structured summary so the session continues without interruption.
+Audience options: `layperson` | `professional` (default) | `expert`.
 
 ---
 
@@ -320,19 +314,11 @@ To run either against the **current** system, replace the `LibrarianAgentsTeam` 
 
 ### `ANTHROPIC_API_KEY` not set
 
-```text
-Error: ANTHROPIC_API_KEY environment variable not set
-```
+The CLI exits immediately. For the backend, the error surfaces on the first agent call. Set the variable, restart your terminal (Windows: `setx`, then open a new terminal).
 
-The CLI exits immediately with this message. For the backend, the error surfaces when the first agent call is made. Fix: set the variable and restart your terminal (Windows: use `setx`, then open a new terminal).
+### `ModuleNotFoundError: No module named 'backend'`
 
-### Import errors when starting the backend
-
-```text
-ModuleNotFoundError: No module named 'backend'
-```
-
-You are running `uvicorn` from inside the `backend/` directory. Always run from the **repo root**:
+You ran `uvicorn` from inside `backend/`. Always run from the **repo root**:
 
 ```bash
 # Wrong
@@ -342,55 +328,27 @@ cd backend && uvicorn app:app --reload
 uvicorn backend.app:app --reload --port 8000
 ```
 
-### Frontend shows "Failed to fetch" or proxy errors
+### Frontend shows "Failed to fetch"
 
-The Next.js frontend proxies API calls to `http://localhost:8000`. If the backend is not running, all API calls will fail with a network error. Start the backend first, then the frontend.
+Next.js proxies REST calls to `http://localhost:8000`, and the SSE stream connects directly to port 8000. Start the backend first, then the frontend.
+
+### SSE stream delivers everything at once, at the end
+
+You are hitting the Next.js proxy. The SSE client in [frontend/lib/sse.ts](frontend/lib/sse.ts) bypasses the proxy and connects to port 8000 directly. If you've changed the backend host or port, set `NEXT_PUBLIC_SSE_BASE`.
 
 ### PDF or DOCX files fail to load
 
-If `PyPDF2` or `python-docx` are not installed, loading those file types raises an `ImportError`. Run:
+Install the optional parsers:
 
 ```bash
 pip install PyPDF2 python-docx
 ```
 
-Plain text (`.txt`), Markdown (`.md`), and HTML (`.html`) files do not require either package.
+TXT / Markdown / HTML work without them.
 
-### SQLite file-locking errors on Windows
+### SQLite file-locking on Windows
 
-SQLite uses WAL (Write-Ahead Logging) mode. On Windows, two processes opening the same `deep_reading.db` file simultaneously (e.g. the backend and the CLI) can occasionally collide. Run only one at a time, or point the CLI to a separate database by setting a different working directory.
-
----
-
-## API reference
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/sessions` | Create a session |
-| GET | `/api/sessions` | List sessions |
-| GET | `/api/sessions/{id}` | Session detail (messages, documents, artifacts) |
-| POST | `/api/sessions/{id}/documents` | Upload document (multipart) |
-| POST | `/api/sessions/{id}/messages` | Submit question, starts agent run |
-| GET | `/api/sessions/{id}/stream` | SSE stream of agent events |
-| GET | `/api/sessions/{id}/context` | Token usage for context meter |
-| POST | `/api/sessions/{id}/compact` | Manually trigger compaction |
-| GET | `/api/artifacts/{id}` | Download artifact |
-| GET | `/api/chunks/{id}` | Fetch source chunk (for citation drawer) |
-
----
-
-## SSE event types
-
-| Event | Fields | Description |
-|-------|--------|-------------|
-| `agent_spawned` | `agent_id`, `role`, `parent` | New agent started |
-| `text_delta` | `agent_id`, `delta` | Streaming text chunk |
-| `tool_use` | `agent_id`, `tool`, `input` | Agent called a tool |
-| `artifact_written` | `artifact_id`, `name` | Artifact persisted |
-| `agent_done` | `agent_id`, `summary` | Agent finished |
-| `run_complete` | `final` | Full run finished |
-| `context_usage` | `tokens`, `window`, `percent` | Context meter update |
-| `compaction_done` | `before_tokens`, `after_tokens` | Compaction completed |
+SQLite uses WAL mode. On Windows, two processes opening the same `deep_reading.db` simultaneously (e.g. backend + CLI) can occasionally collide. Run one at a time, or point the CLI at a separate working directory.
 
 ---
 
@@ -406,12 +364,9 @@ SQLite uses WAL (Write-Ahead Logging) mode. On Windows, two processes opening th
 
 ---
 
-## Future phases (Phase B)
+## Further reading
 
-- **Document comparison** — diff two versions of an Act, section by section
-- **Structured-data uploads** — DuckDB for xlsx/csv alongside text documents
-- **Semantic search** — hybrid BM25 + vector search via `sqlite-vec` (no external vector DB)
-- **Cross-session document library** — persistent workspaces per document
-- **Cross-document RAG** — only when the user has 50+ documents and needs corpus search
-
-See [PLAN.md](PLAN.md) for full roadmap and design rationale.
+- [technical_docs.md](technical_docs.md) — comprehensive technical documentation (API reference, SSE events, schema, orchestration internals).
+- [ARCHITECTURE.md](ARCHITECTURE.md) — component-level architecture notes.
+- [CHANGELOG.md](CHANGELOG.md) — version history.
+- [PLAN.md](PLAN.md) — roadmap and design rationale for Phase B (document diff, semantic search, cross-document RAG).

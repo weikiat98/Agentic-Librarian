@@ -44,8 +44,42 @@ accuracy, depth, and citation fidelity.
    per logical unit of work. Run independent tasks in parallel by spawning multiple
    subagents in a single response.
 3. Every subagent result contains citations in [chunk_id] format. Validate them.
-4. Synthesize results. Write structured artifacts with write_artifact when appropriate.
-5. Call finalize with the complete, cited answer.
+4. Synthesize results. Write structured artifacts with write_artifact when the
+   answer is long, structured, or benefits from being a standalone document
+   (summaries, comparison tables, obligation lists, legal act breakdowns, etc.).
+5. Call finalize with the FINAL user-facing message.
+
+## Finalize contract (STRICT)
+The `result` field of `finalize` is the ONLY thing the user sees as a chat message.
+You MUST ALWAYS provide a substantive `result` — never an empty string, never a
+one-liner like "See the artifact above". It must NOT contain your planning,
+reasoning, or tool-call narration.
+
+### When you called `write_artifact` this turn
+Write the `result` as a natural, conversational recap that introduces and frames
+the artifact for the user — the way a knowledgeable colleague would summarise a
+document they just handed you. Target 300–500 words. Good recap structure:
+
+1. A short intro paragraph (2–4 sentences) that answers the user's question at a
+   high level and names what you've prepared for them.
+2. A handful of themed sub-points — either short bold-labelled paragraphs (e.g.,
+   "**Coverage:** …") or a mixed prose/bullet format — covering the 4–8 most
+   material findings, obligations, or conclusions. Each factual claim carries a
+   [chunk_id] citation.
+3. A closing sentence or two that tells the user what to find in the artifact and
+   invites follow-up questions.
+
+Write in flowing prose, not a skeletal bullet list. Do NOT copy the entire
+artifact content into `result`; the artifact is the full deliverable, the recap
+is a readable digest. Do NOT omit the recap — a missing or trivial `result` is a
+contract violation.
+
+### When you did NOT call `write_artifact`
+`result` is the full answer, written as natural prose, with [chunk_id] citations
+on every factual claim.
+
+Never narrate your process ("I will now…", "Let me search…", "Next I'll…") in the
+finalize result. Save that reasoning for your internal thinking between tool calls.
 
 ## Citation rule
 Every factual claim in your final answer MUST include a [chunk_id] citation.
@@ -115,6 +149,10 @@ async def run_lead(
 
     tokens_in = tokens_out = 0
     final_answer = ""
+    # Track artifacts created this turn so we can backfill a recap if the model
+    # calls `finalize` with an empty `result` (safety net only — the system
+    # prompt requires a real recap).
+    artifacts_this_turn: list[dict] = []
 
     # Agentic loop
     for _iteration in range(40):  # safety limit
@@ -145,8 +183,12 @@ async def run_lead(
             tools=LEAD_TOOLS,
             messages=messages,
         ) as stream:
+            # Lead prose between tool calls is planning/reasoning, not the
+            # user-facing answer — stream it as `thinking_delta` so the UI can
+            # route it into a separate "Thinking…" panel. The actual chat
+            # message is delivered via the `finalize` tool below.
             async for text_chunk in stream.text_stream:
-                bus.publish("text_delta", agent_id=lead_run_id, delta=text_chunk)
+                bus.publish("thinking_delta", agent_id=lead_run_id, delta=text_chunk)
             response = await stream.get_final_message()
 
         tokens_in += response.usage.input_tokens
@@ -182,7 +224,24 @@ async def run_lead(
                 spawn_calls.append({"block_id": block.id, "input": block.input})
 
             elif block.name == "finalize":
-                final_answer = block.input.get("result", "")
+                final_answer = (block.input.get("result") or "").strip()
+                # Safety net: if the model called write_artifact this turn but
+                # left `result` empty or trivially short (< ~25 words), backfill
+                # a minimal message pointing at the artifact(s). The system
+                # prompt requires a full recap; this just prevents a silent UI.
+                if artifacts_this_turn and len(final_answer) < 150:
+                    names = ", ".join(a["name"] for a in artifacts_this_turn if a.get("name"))
+                    fallback = (
+                        f"I've prepared a detailed write-up in the generated file"
+                        f"{'s' if len(artifacts_this_turn) > 1 else ''}"
+                        f"{': ' + names if names else '.'} Open it above for the full breakdown, "
+                        f"and let me know if you'd like me to dig deeper into any specific section."
+                    )
+                    final_answer = final_answer or fallback
+                # Ship the final answer as a single event so the UI can render
+                # it as the authoritative assistant message (separate from the
+                # `thinking_delta` stream it showed while the lead was working).
+                bus.publish("final_message", content=final_answer)
                 bus.publish("run_complete", final=final_answer[:300])
                 await finish_agent_run(lead_run_id, tokens_in, tokens_out)
                 await add_message(session_id, "assistant", final_answer, tokens_in + tokens_out)
@@ -191,6 +250,10 @@ async def run_lead(
             else:
                 result = await handle_tool(block.name, block.input, session_id, doc_ids)
                 if block.name == "write_artifact":
+                    artifacts_this_turn.append({
+                        "artifact_id": result.get("artifact_id"),
+                        "name": result.get("name"),
+                    })
                     bus.publish(
                         "artifact_written",
                         artifact_id=result.get("artifact_id"),
@@ -249,6 +312,7 @@ async def run_lead(
             if hasattr(block, "text"):
                 final_answer += block.text
 
+    bus.publish("final_message", content=final_answer)
     bus.publish("run_complete", final=final_answer[:300])
     await finish_agent_run(lead_run_id, tokens_in, tokens_out)
     await add_message(session_id, "assistant", final_answer, tokens_in + tokens_out)

@@ -9,12 +9,22 @@ Schema (created on first connection):
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Optional
 
 import aiosqlite
+
+
+def _fts5_safe(query: str) -> str:
+    """Quote each token as an FTS5 phrase so operators (`:`, `-`, `NEAR`, column
+    filters) in LLM-generated queries can't reach the parser. Returns a query
+    that matches rows containing all tokens, or an empty phrase if nothing
+    tokenisable remains."""
+    tokens = re.findall(r"\w+", query or "")
+    return " ".join(f'"{t}"' for t in tokens) if tokens else '""'
 
 DB_PATH = "deep_reading.db"
 
@@ -349,6 +359,7 @@ async def get_chunks_for_document(document_id: str) -> list[dict]:
 
 async def search_chunks(document_id: str, query: str, limit: int = 10) -> list[dict]:
     """FTS5 keyword search within a single document's chunks."""
+    safe_query = _fts5_safe(query)
     async with get_db() as db:
         rows = await db.execute_fetchall(
             """
@@ -361,7 +372,7 @@ async def search_chunks(document_id: str, query: str, limit: int = 10) -> list[d
             ORDER BY score
             LIMIT ?
             """,
-            (query, document_id, limit),
+            (safe_query, document_id, limit),
         )
     return [dict(r) for r in rows]
 

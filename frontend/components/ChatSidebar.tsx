@@ -45,6 +45,16 @@ export default function ChatSidebar({ activeSessionId, defaultOpen = true }: Pro
     refresh();
   }, [activeSessionId]);
 
+  // Refresh when the active chat's metadata changes (e.g. auto-generated title
+  // after the first user message). The session page dispatches this event.
+  useEffect(() => {
+    function onSessionsChanged() {
+      refresh();
+    }
+    window.addEventListener("sessions-changed", onSessionsChanged);
+    return () => window.removeEventListener("sessions-changed", onSessionsChanged);
+  }, []);
+
   function newChat() {
     router.push("/home");
   }

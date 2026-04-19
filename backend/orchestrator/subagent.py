@@ -135,8 +135,12 @@ async def run_subagent(
             tools=_SUBAGENT_TOOLS,
             messages=messages,
         ) as stream:
+            # Subagent output is internal reasoning — the Lead consumes
+            # `result_text` via the subagent's return value, not the chat
+            # stream. Publish as `thinking_delta` so the UI shows it only in
+            # the collapsible thinking panel.
             async for text_chunk in stream.text_stream:
-                bus.publish("text_delta", agent_id=agent_id, delta=text_chunk)
+                bus.publish("thinking_delta", agent_id=agent_id, delta=text_chunk)
                 result_text += text_chunk
             response = await stream.get_final_message()
 

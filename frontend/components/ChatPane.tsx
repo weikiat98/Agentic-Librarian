@@ -17,6 +17,9 @@ import {
   Search,
   X,
   FileText,
+  Brain,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { Artifact, Document } from "@/lib/api";
 import CitationLink from "./CitationLink";
@@ -69,12 +72,15 @@ export interface ChatMessage {
   content: string;
   streaming?: boolean;
   attachedDocs?: string[]; // user-facing filenames attached when this message was sent
+  thinking?: string; // reasoning text the agentic system produced while working on this turn
+  artifactIds?: string[]; // artifacts produced *during this turn* — rendered inline with this message only
 }
 
 interface Props {
   sessionId: string;
   messages: ChatMessage[];
   streamingText: string;
+  thinkingText: string;
   artifacts: Artifact[];
   documents: Document[];
   isStreaming: boolean;
@@ -127,6 +133,7 @@ export default function ChatPane({
   sessionId,
   messages,
   streamingText,
+  thinkingText,
   artifacts,
   documents,
   isStreaming,
@@ -217,21 +224,33 @@ export default function ChatPane({
             isLastAssistant={
               msg.role === "assistant" && idx === visibleMessages.length - 1
             }
+            artifacts={artifacts}
             onCitationClick={onCitationClick}
             onRetry={onRetry}
             onEdit={onEdit}
+            onArtifactPreview={onArtifactPreview}
           />
         ))}
 
-        {/* Streaming response — thinking indicator while agents work, then text streams in */}
+        {/* Streaming response — thinking panel streams first, then the final
+            message renders below it once `finalize` fires. */}
         {isStreaming && (
           <div className="flex gap-3">
             <div className="w-7 h-7 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0 mt-1">
               <Bot className="w-4 h-4 text-blue-400" />
             </div>
-            <div className="flex-1 min-w-0 text-sm leading-relaxed text-slate-200">
+            <div className="flex-1 min-w-0 space-y-3">
+              {/* Live thinking panel (collapsible) — visible while agents work. */}
+              {(thinkingText || !streamingText) && (
+                <ThinkingPanel
+                  text={thinkingText}
+                  live
+                  defaultOpen
+                />
+              )}
+
               {streamingText ? (
-                <>
+                <div className="text-sm leading-relaxed text-slate-200">
                   <div className="prose prose-sm prose-invert max-w-none">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -241,8 +260,8 @@ export default function ChatPane({
                     </ReactMarkdown>
                   </div>
                   <span className="inline-block w-1.5 h-4 bg-blue-400 animate-pulse ml-0.5 align-text-bottom" />
-                </>
-              ) : (
+                </div>
+              ) : !thinkingText ? (
                 <div className="flex items-center gap-2 py-1 text-slate-500">
                   <span className="flex gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400/60 animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -251,22 +270,8 @@ export default function ChatPane({
                   </span>
                   <span className="text-xs text-slate-500">Agents working…</span>
                 </div>
-              )}
+              ) : null}
             </div>
-          </div>
-        )}
-
-        {/* Artifacts inline */}
-        {artifacts.length > 0 && (
-          <div className="space-y-2 pl-10 max-w-[50%]">
-            <p className="text-xs text-slate-500 font-medium">Generated artifacts</p>
-            {artifacts.map((a) => (
-              <ArtifactCard
-                key={a.id}
-                artifact={a}
-                onPreview={onArtifactPreview}
-              />
-            ))}
           </div>
         )}
 
@@ -364,15 +369,19 @@ export default function ChatPane({
 function MessageRow({
   msg,
   isLastAssistant,
+  artifacts,
   onCitationClick,
   onRetry,
   onEdit,
+  onArtifactPreview,
 }: {
   msg: ChatMessage;
   isLastAssistant: boolean;
+  artifacts: Artifact[];
   onCitationClick: (id: string) => void;
   onRetry?: (id: string) => void;
   onEdit?: (id: string, newContent: string) => void;
+  onArtifactPreview?: (artifact: Artifact) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -480,14 +489,25 @@ function MessageRow({
     );
   }
 
-  // Assistant row: no bubble — markdown renders flush on the page. Action row
-  // is always visible directly under the content (left-aligned).
+  // Assistant row: thinking panel (if any) above the final message, then the
+  // message, then any artifacts this specific turn produced.
+  const producedArtifacts = msg.artifactIds
+    ? (msg.artifactIds
+        .map((aid) => artifacts.find((a) => a.id === aid))
+        .filter(Boolean) as Artifact[])
+    : [];
+
   return (
     <div className="flex gap-3 justify-start">
       <div className="w-7 h-7 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0 mt-1">
         <Bot className="w-4 h-4 text-blue-400" />
       </div>
       <div className="flex-1 min-w-0">
+        {msg.thinking && (
+          <div className="mb-3">
+            <ThinkingPanel text={msg.thinking} live={false} />
+          </div>
+        )}
         <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -496,6 +516,14 @@ function MessageRow({
             {msg.content}
           </ReactMarkdown>
         </div>
+        {producedArtifacts.length > 0 && (
+          <div className="mt-3 space-y-2 max-w-[90%]">
+            <p className="text-xs text-slate-500 font-medium">Generated files</p>
+            {producedArtifacts.map((a) => (
+              <ArtifactCard key={a.id} artifact={a} onPreview={onArtifactPreview} />
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1 mt-2">
           <IconBtn onClick={copy} title={copied ? "Copied" : "Copy"}>
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -507,6 +535,65 @@ function MessageRow({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Collapsible panel that shows the lead/subagent reasoning stream. While live
+ * (during streaming), it defaults open and shows a pulse indicator. Once the
+ * turn is committed, it collapses by default — reopen via the header button.
+ */
+function ThinkingPanel({
+  text,
+  live,
+  defaultOpen = false,
+}: {
+  text: string;
+  live: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen || live);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (live) setOpen(true);
+  }, [live]);
+
+  useEffect(() => {
+    if (open && live && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [text, open, live]);
+
+  return (
+    <div className="border border-[#2d3148] rounded-lg bg-[#0f1117]/60 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-[#13151f] transition"
+      >
+        <Brain className="w-3.5 h-3.5 text-purple-400" />
+        <span className="font-medium">{live ? "Thinking…" : "Thought process"}</span>
+        {live && (
+          <span className="flex items-center gap-1 text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            live
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-slate-500">
+          {open ? "Hide" : "Show"}
+          {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        </span>
+      </button>
+      {open && (
+        <div
+          ref={scrollRef}
+          className="max-h-64 overflow-y-auto px-3 py-2 text-xs text-slate-400 whitespace-pre-wrap leading-relaxed border-t border-[#2d3148] scroll-smooth font-mono"
+        >
+          {text || (live ? "Agents are starting up…" : "(no reasoning recorded)")}
+          {live && <span className="inline-block w-1 h-3 bg-purple-400/70 animate-pulse ml-0.5 align-text-bottom" />}
+        </div>
+      )}
     </div>
   );
 }

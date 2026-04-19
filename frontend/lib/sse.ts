@@ -5,6 +5,8 @@
 export type SSEEventType =
   | "agent_spawned"
   | "text_delta"
+  | "thinking_delta"
+  | "final_message"
   | "tool_use"
   | "artifact_written"
   | "agent_done"
@@ -24,6 +26,17 @@ export interface TextDeltaEvent {
   type: "text_delta";
   agent_id: string;
   delta: string;
+}
+
+export interface ThinkingDeltaEvent {
+  type: "thinking_delta";
+  agent_id: string;
+  delta: string;
+}
+
+export interface FinalMessageEvent {
+  type: "final_message";
+  content: string;
 }
 
 export interface ToolUseEvent {
@@ -71,6 +84,8 @@ export interface ErrorEvent {
 export type SSEEvent =
   | AgentSpawnedEvent
   | TextDeltaEvent
+  | ThinkingDeltaEvent
+  | FinalMessageEvent
   | ToolUseEvent
   | ArtifactWrittenEvent
   | AgentDoneEvent
@@ -81,12 +96,21 @@ export type SSEEvent =
 
 export type SSEHandler = (event: SSEEvent) => void;
 
+// SSE endpoint bypasses the Next.js proxy, which buffers streamed responses
+// and delivers every event in a single burst at the end of the run. Hit the
+// FastAPI backend directly so deltas arrive as the model emits them.
+const SSE_BASE =
+  process.env.NEXT_PUBLIC_SSE_BASE ||
+  (typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : "http://localhost:8000");
+
 export function subscribeToStream(
   sessionId: string,
   onEvent: SSEHandler,
   onClose?: () => void
 ): () => void {
-  const es = new EventSource(`/api/sessions/${sessionId}/stream`);
+  const es = new EventSource(`${SSE_BASE}/api/sessions/${sessionId}/stream`);
 
   es.onmessage = (e) => {
     try {

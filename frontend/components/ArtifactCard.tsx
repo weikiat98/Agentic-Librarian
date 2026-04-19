@@ -12,6 +12,7 @@ interface Props {
 function mimeIcon(mime: string) {
   if (mime === "text/html") return "HTML";
   if (mime === "text/csv") return "CSV";
+  if (mime === "text/plain") return "TXT";
   return "MD";
 }
 

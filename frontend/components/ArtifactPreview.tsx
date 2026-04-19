@@ -1,11 +1,17 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Artifact } from "@/lib/api";
 import { CITATION_RE, UUID_RE, downloadArtifact } from "@/lib/citations";
 import CitationLink from "./CitationLink";
+
+const WIDTH_STORAGE_KEY = "artifact-preview-width";
+const MIN_WIDTH = 360;
+// The outer layout uses a max-w-[50vw] CSS cap; enforce a compatible hard max.
+const MAX_WIDTH_VW_FRACTION = 0.7;
 
 function injectCitations(nodes: React.ReactNode, onCitation: (id: string) => void): React.ReactNode {
   const replaceInString = (text: string, keyPrefix: string): React.ReactNode[] => {
@@ -61,21 +67,100 @@ function parseCsv(text: string): string[][] {
 
 
 export default function ArtifactPreview({ artifact, onClose, onCitationClick }: Props) {
+  const [width, setWidth] = useState<number>(640);
+  const [dragging, setDragging] = useState(false);
+  const rafRef = useRef<number | null>(null);
+
+  // Load persisted width once on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(WIDTH_STORAGE_KEY);
+    const parsed = saved ? parseInt(saved, 10) : NaN;
+    if (!Number.isNaN(parsed)) {
+      setWidth(clampWidth(parsed));
+    } else {
+      // Default to ~40vw, clamped into range.
+      setWidth(clampWidth(Math.round(window.innerWidth * 0.4)));
+    }
+  }, []);
+
+  function clampWidth(px: number): number {
+    if (typeof window === "undefined") return px;
+    const max = Math.max(MIN_WIDTH + 40, Math.floor(window.innerWidth * MAX_WIDTH_VW_FRACTION));
+    return Math.min(Math.max(px, MIN_WIDTH), max);
+  }
+
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      // Left edge of the aside = window.innerWidth - width; dragging right
+      // shrinks the panel, dragging left widens it.
+      const next = clampWidth(window.innerWidth - e.clientX);
+      setWidth(next);
+    });
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    setDragging(false);
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    // Persist after the drag settles.
+    setWidth((w) => {
+      try {
+        window.localStorage.setItem(WIDTH_STORAGE_KEY, String(w));
+      } catch {
+        // Storage can be unavailable (private mode); not fatal.
+      }
+      return w;
+    });
+  }, [onMouseMove]);
+
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault();
+    setDragging(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
   if (!artifact) return null;
   const handleCitation = onCitationClick ?? (() => {});
 
   const mime = artifact.mime_type;
 
   // Side canvas: lives as a sibling flex column so opening it shrinks the chat
-  // column instead of overlapping it.
+  // column instead of overlapping it. Width is user-adjustable via the left-
+  // edge drag handle and persisted to localStorage.
   return (
-    <aside className="shrink-0 w-full sm:w-[560px] lg:w-[640px] max-w-[50vw] h-full bg-[#13151f] border-l border-[#2d3148] flex flex-col shadow-2xl animate-slide-in-right">
+    <aside
+      style={{ width: `${width}px` }}
+      className="shrink-0 h-full bg-[#13151f] border-l border-[#2d3148] flex flex-col shadow-2xl animate-slide-in-right relative"
+    >
+      {/* Drag handle on the left edge */}
+      <div
+        onMouseDown={startDrag}
+        title="Drag to resize"
+        className={`absolute left-0 top-0 bottom-0 w-1 -translate-x-0.5 cursor-col-resize z-20 transition-colors ${
+          dragging ? "bg-blue-500/70" : "bg-transparent hover:bg-blue-500/40"
+        }`}
+      />
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2d3148]">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-semibold text-slate-200 truncate">{artifact.name}</span>
           <span className="text-[10px] uppercase tracking-wide text-slate-500 shrink-0">
-            {mime === "text/html" ? "HTML" : mime === "text/csv" ? "CSV" : "MD"}
+            {mime === "text/html"
+              ? "HTML"
+              : mime === "text/csv"
+              ? "CSV"
+              : mime === "text/plain"
+              ? "TXT"
+              : "MD"}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -107,6 +192,10 @@ export default function ArtifactPreview({ artifact, onClose, onCitationClick }: 
           />
         ) : mime === "text/csv" ? (
           <CsvTable text={artifact.content} />
+        ) : mime === "text/plain" ? (
+          <pre className="p-6 text-xs text-slate-200 whitespace-pre-wrap break-words font-mono leading-relaxed">
+            {artifact.content}
+          </pre>
         ) : (
           <div className="prose prose-sm prose-invert max-w-none p-6">
             <ReactMarkdown

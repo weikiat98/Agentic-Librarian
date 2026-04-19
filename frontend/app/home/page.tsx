@@ -28,6 +28,7 @@ export default function HomePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const plusRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +65,34 @@ export default function HomePage() {
     }
   }
 
+  async function handleFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    for (const file of list) {
+      await handleUpload(file);
+    }
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragging) setDragging(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only clear when leaving the outer container (not a child element).
+    if (e.currentTarget === e.target) setDragging(false);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) handleFiles(files);
+  }
+
   function removePending(id: string) {
     setPendingDocs((prev) => prev.filter((d) => d.id !== id));
   }
@@ -91,19 +120,36 @@ export default function HomePage() {
     <div className="flex h-screen w-full overflow-hidden bg-[#0a0b10]">
       <ChatSidebar />
 
-      <main className="flex-1 flex flex-col">
+      <main
+        className="flex-1 flex flex-col relative"
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
         {/* Top bar with audience toggle */}
         <header className="h-14 shrink-0 flex items-center justify-center px-6 border-b border-[#2d3148]">
           <AudienceToggle value={audience} onChange={setAudience} />
         </header>
 
-        {/* Centred welcome + chat bar */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6">
+        {/* Drag-and-drop overlay */}
+        {dragging && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-blue-600/10 border-2 border-dashed border-blue-500/70 pointer-events-none">
+            <div className="px-5 py-3 rounded-lg bg-[#13151f] border border-blue-500/60 text-sm text-blue-200 font-medium">
+              Drop files to upload
+            </div>
+          </div>
+        )}
+
+        {/* Welcome + chat bar — top-biased so the input bar sits where the
+            greeting used to appear when the block was fully centred.
+            pt-[22vh] puts the greeting roughly 22% down; with mb-2 + mb-6
+            the input lands at ~30–33% which matches where the h1 was. */}
+        <div className="flex-1 flex flex-col items-center px-6 pt-[22vh]">
           <div className="w-full max-w-2xl flex flex-col items-center">
-            <h1 className="text-4xl font-semibold text-slate-100 mb-3 text-center">
+            <h1 className="text-4xl font-semibold text-slate-100 mb-2 text-center">
               {greet}.
             </h1>
-            <p className="text-slate-400 text-base mb-10 text-center">
+            <p className="text-slate-400 text-base mb-6 text-center">
               Ask a question or upload a document to begin.
             </p>
 
