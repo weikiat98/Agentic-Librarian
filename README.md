@@ -4,7 +4,7 @@ A full-stack multi-agent system for deep analysis of lengthy and technical docum
 
 Every claim in every answer carries a citation. Every citation is clickable. Every source is verifiable.
 
-> **Version 2.0** — This release is a full rewrite. See [CHANGELOG.md](CHANGELOG.md) for the full list of changes against the original synchronous prototype.
+> **Version 2.1** — This release is a full rewrite. See [CHANGELOG.md](CHANGELOG.md) for the full list of changes against the original synchronous prototype.
 
 ---
 
@@ -39,7 +39,7 @@ Four product goals shape every feature:
 
 ---
 
-## What's new in 2.0
+## What's new in 2.1
 
 - **Splash → Home → Session flow** — a three-page app: landing splash, a home screen with greeting + draft upload, and per-session chat pages.
 - **Persistent chat sidebar** — list, pin, rename, and delete sessions; titles auto-generated from the first user message.
@@ -51,7 +51,7 @@ Four product goals shape every feature:
 - **Drag-and-drop everywhere** — both the home screen and session pages accept dropped files.
 - **Stable `final_message` contract** — the user-facing answer ships as a single SSE event, cleanly separated from streaming reasoning.
 - **Full async backend** — the original synchronous `LibrarianAgentsTeam` prototype has been removed; the CLI now drives the same async orchestrator as the web app.
-
+- **Splash Page Cosmetics** — Added transitional backgrounds and updated colour scheme.
 ---
 
 ## Simplified architecture

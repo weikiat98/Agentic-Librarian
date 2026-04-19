@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [2.1.0]: Frontend Edits
+
 ### Added
 
 - **Splash slideshow** — the landing page ([frontend/app/page.tsx](frontend/app/page.tsx)) now crossfades through six full-screen backdrop images (`nebula`, `galaxy`, `starrynight` pairs) on a 6-second interval with a 2-second opacity transition. Images are preloaded on mount so the first crossfade never flashes. A top-to-bottom black gradient overlay (`from-black/70 via-black/50 to-black/80`) keeps the title, tagline, and START button legible over bright backdrops. Drop-in location for new images: [frontend/public/splash/](frontend/public/splash/).
@@ -25,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [2.0.0] — Full-stack multi-agent revamp
 
-The first release under the new architecture. The original synchronous `LibrarianAgentsTeam` prototype has been retired; the project is now a FastAPI + Next.js application driven by an async orchestrator-workers agent loop.
+The first release under the new architecture. The original synchronous `LibrarianAgentsTeam` prototype has evolved with a FastAPI + Next.js application driven by an async orchestrator-workers agent loop.
 
 ### Added
 
