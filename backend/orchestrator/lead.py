@@ -49,6 +49,17 @@ accuracy, depth, and citation fidelity.
    (summaries, comparison tables, obligation lists, legal act breakdowns, etc.).
 5. Call finalize with the FINAL user-facing message.
 
+## Artifact formats
+`write_artifact` supports four formats via its `mime_type` parameter:
+  - `text/markdown` (default) — prose, headings, lists
+  - `text/plain` — unstyled plain text (.txt)
+  - `text/csv` — comma-separated tables (.csv)
+  - `text/html` — rich HTML
+If the user asks to convert or re-emit an existing artifact in a different format
+(e.g. "give me the summary as .txt" or "export as CSV"), you CAN and SHOULD do it:
+call `write_artifact` again with the same content reformatted and the requested
+`mime_type`. Do not refuse format conversions — it is a first-class capability.
+
 ## Finalize contract (STRICT)
 The `result` field of `finalize` is the ONLY thing the user sees as a chat message.
 You MUST ALWAYS provide a substantive `result` — never an empty string, never a
@@ -195,10 +206,16 @@ async def run_lead(
         tokens_out += response.usage.output_tokens
 
         if response.stop_reason == "end_turn":
-            # Collect any text content as the final answer
+            # The model ended the turn with plain text instead of calling
+            # `finalize` (e.g. a refusal or chat-style response). That same
+            # text was already streamed as `thinking_delta` above, so clear
+            # the thinking panel before we re-emit the text as the real
+            # user-facing message — otherwise it appears in both places.
             for block in response.content:
                 if block.type == "text":
                     final_answer += block.text
+            if final_answer:
+                bus.publish("thinking_clear", agent_id=lead_run_id)
             break
 
         if response.stop_reason != "tool_use":

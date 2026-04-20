@@ -88,6 +88,14 @@ export default function SessionPage() {
             accumulatedThinking += event.delta;
             setThinkingText(accumulatedThinking);
             break;
+          case "thinking_clear":
+            // Backend signals that what was streamed as thinking is actually
+            // the user-facing message (model ended turn without `finalize`).
+            // Drop the accumulated thinking so it isn't duplicated under the
+            // final chat bubble.
+            accumulatedThinking = "";
+            setThinkingText("");
+            break;
           case "text_delta":
             // Legacy path: if any agent still publishes plain text_delta,
             // treat it as streaming content (kept for forward compatibility).

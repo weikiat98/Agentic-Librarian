@@ -6,6 +6,7 @@ export type SSEEventType =
   | "agent_spawned"
   | "text_delta"
   | "thinking_delta"
+  | "thinking_clear"
   | "final_message"
   | "tool_use"
   | "artifact_written"
@@ -32,6 +33,11 @@ export interface ThinkingDeltaEvent {
   type: "thinking_delta";
   agent_id: string;
   delta: string;
+}
+
+export interface ThinkingClearEvent {
+  type: "thinking_clear";
+  agent_id: string;
 }
 
 export interface FinalMessageEvent {
@@ -85,6 +91,7 @@ export type SSEEvent =
   | AgentSpawnedEvent
   | TextDeltaEvent
   | ThinkingDeltaEvent
+  | ThinkingClearEvent
   | FinalMessageEvent
   | ToolUseEvent
   | ArtifactWrittenEvent
