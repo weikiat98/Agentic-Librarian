@@ -33,7 +33,7 @@ from backend.orchestrator.event_bus import SessionEventBus
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001") # change to claude-opus-4-6 for production and use claude-haiku-4-5-20251001 for testing
 WINDOW = 200_000
 
-_LEAD_SYSTEM = """You are the Lead Orchestrator of Nebula, a multi-agent document analysis assistant.
+_LEAD_SYSTEM = """You are the Lead Orchestrator of Constellation, a multi-agent document analysis assistant.
 
 Your job is to answer the user's question about an uploaded document with maximum
 accuracy, depth, and citation fidelity.

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Nebula are documented in this file.
+All notable changes to Constellation are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Pre-2.0 entries are reconstructed retroactively from git history and therefore list the significant changes per era rather than a per-commit log.
 
@@ -10,11 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- **Splash slideshow** — the landing page ([frontend/app/page.tsx](frontend/app/page.tsx)) now crossfades through six full-screen backdrop images (`nebula`, `galaxy`, `starrynight` pairs) on a 6-second interval with a 2-second opacity transition. Images are preloaded on mount so the first crossfade never flashes. A top-to-bottom black gradient overlay (`from-black/70 via-black/50 to-black/80`) keeps the title, tagline, and START button legible over bright backdrops. Drop-in location for new images: [frontend/public/splash/](frontend/public/splash/).
+- **Splash slideshow** — the landing page ([frontend/app/page.tsx](frontend/app/page.tsx)) now crossfades through six full-screen backdrop images (`constellation`, `galaxy`, `starrynight` pairs) on a 6-second interval with a 2-second opacity transition. Images are preloaded on mount so the first crossfade never flashes. A top-to-bottom black gradient overlay (`from-black/70 via-black/50 to-black/80`) keeps the title, tagline, and START button legible over bright backdrops. Drop-in location for new images: [frontend/public/splash/](frontend/public/splash/).
 
 ### Changed
 
-- **Project renamed to Nebula** — the product name "Deep-Reading Assistant" has been retired in favour of **Nebula** across all user-facing surfaces: the FastAPI app title, frontend `<title>`, CLI banner and `--help` description, sidebar header, session fallback title, Lead system prompt preamble, `frontend/package.json` / `package-lock.json` `name` field, README, PLAN, ARCHITECTURE, CHANGELOG, and technical_docs. The database filename (`deep_reading.db`) and the internal `DB_PATH` identifier were deliberately left untouched to avoid migration churn — they are not user-facing.
+- **Project renamed to Constellation** — the product name "Deep-Reading Assistant" has been retired in favour of **Constellation** across all user-facing surfaces: the FastAPI app title, frontend `<title>`, CLI banner and `--help` description, sidebar header, session fallback title, Lead system prompt preamble, `frontend/package.json` / `package-lock.json` `name` field, README, PLAN, ARCHITECTURE, CHANGELOG, and technical_docs. The database filename (`deep_reading.db`) and the internal `DB_PATH` identifier were deliberately left untouched to avoid migration churn — they are not user-facing.
 - **Splash layout** — the inline `BookOpen` icon next to the title has been removed on the splash page only; the home page sidebar and assistant avatar still use it.
 - **Primary CTA palette shift** — the signature blue buttons on four high-visibility surfaces flipped to white with `text-slate-900` for a cleaner look against the darker chrome:
   - START button on the splash page ([frontend/app/page.tsx](frontend/app/page.tsx)).

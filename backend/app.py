@@ -1,5 +1,5 @@
 """
-FastAPI application — Nebula backend.
+FastAPI application — Constellation backend.
 
 Endpoints:
   POST /api/sessions                          Create session
@@ -58,7 +58,7 @@ from backend.store.sessions import (
 from backend.extractors.definitions import extract_definitions
 from backend.extractors.cross_refs import extract_cross_refs
 
-app = FastAPI(title="Nebula", version="1.0.0")
+app = FastAPI(title="Constellation", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

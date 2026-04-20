@@ -140,7 +140,7 @@ export default function ChatSidebar({ activeSessionId, defaultOpen = true }: Pro
           title="Home"
         >
           <BookOpen className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-semibold">Nebula</span>
+          <span className="text-sm font-semibold">Constellation</span>
         </button>
         <button
           onClick={() => setOpen(false)}

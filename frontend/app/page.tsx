@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const SLIDES = [
-  "/splash/nebula1.jpg",
+  "/splash/constellation1.jpg",
   "/splash/galaxy1.jpg",
   "/splash/starrynight1.jpg",
-  "/splash/nebula2.jpg",
+  "/splash/constellation2.jpg",
   "/splash/galaxy2.jpg",
   "/splash/starrynight2.jpg",
 ];
@@ -55,7 +55,7 @@ export default function SplashPage() {
         <div className="flex flex-col items-center text-center max-w-3xl">
           <div className="flex items-center justify-center mb-8">
             <h1 className="text-6xl font-bold text-slate-100 tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-              Nebula
+              Constellation
             </h1>
           </div>
 

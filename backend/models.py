@@ -1,5 +1,5 @@
 """
-Pydantic v2 schemas for the Nebula backend.
+Pydantic v2 schemas for the Constellation backend.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
-# Nebula — Full-Stack Plan
+# Constellation — Full-Stack Plan
 
 ## Context
 
-The repo currently contains a CLI-only, synchronous Python prototype ([librarian_agents_team.py](librarian_agents_team.py)) that orchestrates a Lead agent and three hardcoded SubAgents against Anthropic's Messages API. The goal is to evolve this into **Nebula**, a multi-agent document analysis assistant for lengthy, high-stakes documents — academic research papers, public policies, regulations, legal Acts, and compliance frameworks.
+The repo currently contains a CLI-only, synchronous Python prototype ([librarian_agents_team.py](librarian_agents_team.py)) that orchestrates a Lead agent and three hardcoded SubAgents against Anthropic's Messages API. The goal is to evolve this into **Constellation**, a multi-agent document analysis assistant for lengthy, high-stakes documents — academic research papers, public policies, regulations, legal Acts, and compliance frameworks.
 
 ### Who this is for and what they need
 
@@ -210,9 +210,9 @@ Three-pane layout:
 
 ## Implementation phases
 
-Phases are split into **Phase A (build now)** — the core Nebula product, sufficient as an end-state for the target use case — and **Phase B (build later, on-demand)** — additions triggered by specific user needs, not speculation.
+Phases are split into **Phase A (build now)** — the core Constellation product, sufficient as an end-state for the target use case — and **Phase B (build later, on-demand)** — additions triggered by specific user needs, not speculation.
 
-### Phase A — Build now (core Nebula)
+### Phase A — Build now (core Constellation)
 
 These phases deliver the complete value proposition for academic papers, policies, regulations, and compliance docs. Build in order; each produces a demoable deliverable.
 
@@ -250,7 +250,7 @@ Extract-to-table subagent (reuses existing SubAgent 3 concept). "List every obli
 **A9. Hardening**
 Simple API key auth, rate limits, error surfaces, token-usage display, Stop/Resume, integration tests.
 
-At the end of Phase A, Nebula is a complete, useful product. **Most users will never need anything beyond this.**
+At the end of Phase A, Constellation is a complete, useful product. **Most users will never need anything beyond this.**
 
 ### Phase B — Build later, triggered by specific user needs
 

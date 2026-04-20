@@ -1,6 +1,6 @@
-# Technical Documentation — Nebula
+# Technical Documentation — Constellation
 
-Comprehensive technical reference for developers working with Nebula. For a user-facing guide see [README.md](README.md); for a higher-level architectural overview see [ARCHITECTURE.md](ARCHITECTURE.md).
+Comprehensive technical reference for developers working with Constellation. For a user-facing guide see [README.md](README.md); for a higher-level architectural overview see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -45,7 +45,7 @@ Comprehensive technical reference for developers working with Nebula. For a user
 
 ## 1. System overview
 
-Nebula is a three-tier application:
+Constellation is a three-tier application:
 
 1. **Frontend** — Next.js 15 App Router + React 19 + Tailwind. Single-page experience across Splash (`/`), Home (`/home`), and Session (`/sessions/[id]`).
 2. **Backend** — FastAPI running on `uvicorn`, exposing REST + Server-Sent Events (SSE). All I/O is async; SQLite access goes through `aiosqlite`.

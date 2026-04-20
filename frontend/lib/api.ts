@@ -1,5 +1,5 @@
 /**
- * Typed API helpers for the Nebula backend.
+ * Typed API helpers for the Constellation backend.
  */
 
 const BASE = "/api";

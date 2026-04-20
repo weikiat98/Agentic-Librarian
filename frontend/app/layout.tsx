@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nebula",
+  title: "Constellation",
   description: "Multi-agent document analysis for legal, policy, and academic texts",
 };
 

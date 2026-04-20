@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Nebula — Command Line Interface
+Constellation — Command Line Interface
 
 Repoints to the new async orchestrator engine.
 """
@@ -65,7 +65,7 @@ async def _run_async(args):
 
     if args.interactive:
         print("\n" + "=" * 60)
-        print("Nebula — Interactive Mode")
+        print("Constellation — Interactive Mode")
         print("=" * 60)
         print(f"Document : {input_path.name}")
         print(f"Chunks   : {result['chunk_count']}")
@@ -144,7 +144,7 @@ async def _run_async(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Nebula — intelligent document analysis",
+        description="Constellation — intelligent document analysis",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
