@@ -477,7 +477,7 @@ Repeat sections 1, 6, and 9 in at least two browsers.
 
 - uploaded session files cannot be deleted or removed
 - switching layperson, professional and expert modes should appear in the chat interface as "~  switched to layperson mode ~" in the centre. 
-- file previwer canvas should include a copy button alongside with download and close
+- file previewer canvas should include a copy button alongside with download and close
 - generated artefact button can be reduced in size, whereby the size is dependent on the title generated for the generated artefact.
 - when asking questions that use the agentic system historical knowledge, the thought process messages appear to be mixed with the streaming animation of the actual message output response. the final message output is thus appeared as a single chunk of text thrown to the user but contain no thought process inside.
 - will need to investigate how is the percentage context window meter progress bar calculated. the context used appears different from the token counter beside it and this discrepancy is causing confusion where rightfully they should be the same?
