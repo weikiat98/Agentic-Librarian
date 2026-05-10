@@ -576,4 +576,16 @@ There is no automated test suite in this revision. Manual test checklist:
 - Manual compaction fires a `compaction_done` event and reduces `/context` token count.
 - CLI `--interactive` round-trip with `--verbose` prints agent events.
 
+### Commands for testing
+```
+uvicorn backend.app:app --reload --port 8000 # start backend
+
+# open new terminal
+cd frontend
+
+npm run dev # command to start application for testing and development works
+npm run build # command to verify no errors
+npm run start # command to start application in prod
+```
+
 Future work: pytest around `handle_tool`, deterministic fixtures for the chunker, and a mocked `anthropic.AsyncAnthropic` to exercise `run_lead` without network calls.
