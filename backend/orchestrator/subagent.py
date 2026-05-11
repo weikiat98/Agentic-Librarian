@@ -170,12 +170,25 @@ async def run_subagent(
         ) as stream:
             # Subagent output is internal reasoning — the Lead consumes
             # `result_text` via the subagent's return value, not the chat
-            # stream. Publish as `thinking_delta` so the UI shows it only in
-            # the collapsible thinking panel.
+            # stream. The full text is published as a single `thinking_delta`
+            # after the agent finishes (see below) so that parallel subagents
+            # spawned via asyncio.gather don't interleave their chunks at the
+            # bus level, which previously corrupted [chunk_id] citations
+            # (UUIDs split mid-string by another agent's text rendered as raw
+            # fragments in the thought-process panel instead of resolved
+            # [filename p.N] labels).
+            iteration_text = ""
             async for text_chunk in stream.text_stream:
-                bus.publish("thinking_delta", agent_id=agent_id, delta=text_chunk)
-                result_text += text_chunk
+                iteration_text += text_chunk
+            result_text += iteration_text
             response = await stream.get_final_message()
+
+            if iteration_text:
+                bus.publish(
+                    "thinking_delta",
+                    agent_id=agent_id,
+                    delta=f"\n\n[{role_display}]\n{iteration_text}",
+                )
 
         tokens_in += response.usage.input_tokens
         tokens_out += response.usage.output_tokens
