@@ -12,58 +12,59 @@ Constellation is a full-stack multi-agent system optimised for deep analysis of 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser  (Next.js 15 + React 19 + Tailwind)                    │
 │                                                                 │
-│  ┌───────────────┐  ┌───────────────────────┐  ┌─────────────┐ │
-│  │ Sessions list │  │  Chat pane            │  │ Agent Trace │ │
-│  │ Upload zone   │  │  - streaming messages │  │ - live tree │ │
-│  │               │  │  - citation links     │  │ - tool calls│ │
+│  ┌───────────────┐  ┌───────────────────────┐  ┌─────────────┐  │
+│  │ Sessions list │  │  Chat pane            │  │ Agent Trace │  │
+│  │ Upload zone   │  │  - streaming messages │  │ - live tree │  │
+│  │               │  │  - citation links     │  │ - tool calls│  │
 │  └───────────────┘  │  - artifact cards     │  │ - collapsible│ │
-│                     │  - audience toggle    │  └─────────────┘ │
-│                     │  - context meter      │                  │
-│                     └───────────────────────┘                  │
+│                     │  - audience toggle    │  └─────────────┘  │
+│                     │  - context meter      │                   │
+│                     └───────────────────────┘                   │
 └──────────────────────────────▲──────────────────────────────────┘
                                │  REST + SSE
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  FastAPI (async, uvicorn)                                        │
-│                                                                  │
-│  POST /sessions          GET  /sessions/{id}                     │
-│  PATCH /sessions/{id}    DELETE /sessions/{id}                   │
-│  DELETE /sessions/{id}/messages/after/{mid}  (edit/retry)        │
-│  POST /sessions/{id}/documents  (ingest pipeline)                │
-│  DELETE /sessions/{id}/documents/{did}  (refused if referenced)  │
-│  POST /sessions/{id}/messages   (kicks off agent run)            │
-│  GET  /sessions/{id}/stream     (SSE event stream)               │
-│  GET  /sessions/{id}/trace      (replay persisted trace)         │
-│  GET  /sessions/{id}/context    (token usage)                    │
-│  POST /sessions/{id}/compact    (manual compaction)              │
-│  POST /sessions/{id}/count_tokens  (pre-send estimate)           │
-│  GET  /api/chunks/{id}          (source drawer)                  │
-│  GET  /api/artifacts/{id}                                        │
+│  FastAPI (async, uvicorn)                                       │
+│                                                                 │
+│  POST /sessions          GET  /sessions/{id}                    │
+│  PATCH /sessions/{id}    DELETE /sessions/{id}                  │
+│  DELETE /sessions/{id}/messages/after/{mid}  (edit/retry)       │
+│  POST /sessions/{id}/documents  (ingest pipeline)               │
+│  DELETE /sessions/{id}/documents/{did}  (refused if referenced) │
+│  POST /sessions/{id}/messages   (kicks off agent run)           │
+│  POST /sessions/{id}/cancel     (stop in-flight run)            │
+│  GET  /sessions/{id}/stream     (SSE event stream)              │
+│  GET  /sessions/{id}/trace      (replay persisted trace)        │
+│  GET  /sessions/{id}/context    (token usage)                   │
+│  POST /sessions/{id}/compact    (manual compaction)             │
+│  POST /sessions/{id}/count_tokens  (pre-send estimate)          │
+│  GET  /api/chunks/{id}          (source drawer)                 │
+│  GET  /api/artifacts/{id}                                       │
 └──────────────────────────────▲──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  Agent Orchestration                                             │
-│                                                                  │
-│  LeadOrchestrator                                                │
+│  Agent Orchestration                                            │
+│                                                                 │
+│  LeadOrchestrator                                               │
 │  ├── tool: search_document (FTS5, within-document)              │
-│  ├── tool: read_document_chunk                                   │
+│  ├── tool: read_document_chunk                                  │
 │  ├── tool: resolve_reference  (cross-ref → chunk)               │
-│  ├── tool: lookup_definition                                     │
+│  ├── tool: lookup_definition                                    │
 │  ├── tool: spawn_subagent  ──► asyncio.gather ──► N subagents   │
-│  ├── tool: write_artifact                                        │
+│  ├── tool: write_artifact                                       │
 │  ├── tool: advisor  (optional; enabled via ADVISOR_MODEL env)   │
-│  └── tool: finalize                                              │
-│                                                                  │
-│  SubAgent (per task, isolated context window)                    │
-│  └── tool: read_document_chunk                                   │
+│  └── tool: finalize                                             │
+│                                                                 │
+│  SubAgent (per task, isolated context window)                   │
+│  └── tool: read_document_chunk                                  │
 └──────────────────────────────▲──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│  SQLite (aiosqlite + FTS5)                                       │
-│                                                                  │
-│  sessions (+ last_run_state) · messages (+ attached docs)        │
-│  documents · chunks · chunks_fts                                 │
-│  definitions · cross_refs · artifacts · agent_runs               │
-│  trace_events  (persisted SSE events, replayed on reload)        │
+│  SQLite (aiosqlite + FTS5)                                      │
+│                                                                 │
+│  sessions (+ last_run_state) · messages (+ attached docs)       │
+│  documents · chunks · chunks_fts                                │
+│  definitions · cross_refs · artifacts · agent_runs              │
+│  trace_events  (persisted SSE events, replayed on reload)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,13 +89,13 @@ Built with Next.js 15 App Router, React 19, Tailwind CSS.
 
 #### Key components
 
-- **[ChatPane](frontend/components/ChatPane.tsx)** — renders messages with `react-markdown`. Parses `[uuid]` citation tokens inline and replaces them with `CitationLink` buttons.
-- **[AgentTrace](frontend/components/AgentTrace.tsx)** — consumes SSE events and builds a collapsible event log. Expandable entries show tool inputs and agent summaries.
-- **[CitationLink](frontend/components/CitationLink.tsx)** — clickable `[chunk_id]` badge that opens `SourceDrawer`.
-- **[SourceDrawer](frontend/components/SourceDrawer.tsx)** — slide-in panel fetching the raw source chunk from `/api/chunks/{id}` for verification.
-- **[AudienceToggle](frontend/components/AudienceToggle.tsx)** — switches between layperson / professional / expert; sent with every message.
-- **[ContextMeter](frontend/components/ContextMeter.tsx)** — polls `/api/sessions/{id}/context` and receives live `context_usage` SSE events. Colour-coded bar + Compact button (amber ≥ 70%, red ≥ 90%).
-- **[TokenCounter](frontend/components/TokenCounter.tsx)** — inline pre-send estimator that calls `POST /api/sessions/{id}/count_tokens` (backed by Anthropic's free `count_tokens`) and shows `prompt + base` tokens before the user hits send. Accounts for system prompt, tools, 50-chunk doc index, and chat history.
+- **[ChatPane](frontend/components/ChatPane.tsx)**: renders messages with `react-markdown`. Parses `[uuid]` citation tokens inline and replaces them with `CitationLink` buttons.
+- **[AgentTrace](frontend/components/AgentTrace.tsx)**: consumes SSE events and builds a collapsible event log. Expandable entries show tool inputs and agent summaries.
+- **[CitationLink](frontend/components/CitationLink.tsx)**: clickable `[chunk_id]` badge that opens `SourceDrawer`.
+- **[SourceDrawer](frontend/components/SourceDrawer.tsx)**: slide-in panel fetching the raw source chunk from `/api/chunks/{id}` for verification.
+- **[AudienceToggle](frontend/components/AudienceToggle.tsx)**: switches between layperson / professional / expert; sent with every message.
+- **[ContextMeter](frontend/components/ContextMeter.tsx)**: pure presentational component. Receives `totalTokens` / `window` props from `ChatPane`'s cached `count_tokens` baseline, plus a `livePercent` updated from `context_usage` SSE events during a run. No longer fetches `/api/sessions/{id}/context` itself (decoupled in 2.3.3). Colour-coded bar + Compact button (amber ≥ 70%, red ≥ 90%).
+- **[TokenCounter](frontend/components/TokenCounter.tsx)**: inline pre-send estimator that calls `POST /api/sessions/{id}/count_tokens` (backed by Anthropic's free `count_tokens`) and shows `prompt + base` tokens before the user hits send. Accounts for system prompt, tools, 50-chunk doc index, and chat history.
 
 #### Data flow
 
@@ -185,7 +186,7 @@ Each subagent is a completely fresh `messages.create` call:
 
 Gated behind the `ADVISOR_MODEL` environment variable. When set (e.g. `claude-opus-4-7`), `_build_tools()` in [backend/orchestrator/lead.py](backend/orchestrator/lead.py) appends an `advisor_20260301` beta tool to the Lead's toolset and switches the stream to `client.beta.messages.stream(...)` with the `advisor-tool-2026-03-01` beta header.
 
-- `max_uses: 3` per run — matches the three natural decision points: planning, post-synthesis review, and pre-finalize quality gate.
+- `max_uses: 3` per run - matches the three natural decision points: planning, post-synthesis review, and pre-finalize quality gate.
 - Advisor inference runs inside the same Messages call; results arrive as `advisor_tool_result` blocks in `response.content`.
 - The Lead surfaces the advisor's text to the UI as a `thinking_delta` event prefixed with `[Advisor]` so the user sees the counsel live.
 - Advisor token usage is accumulated into the Lead's `tokens_in` / `tokens_out` via `response.usage.iterations` so accounting is complete.
@@ -269,13 +270,19 @@ Citation enforcement is architectural, not advisory. Subagent system prompts man
 
 Agent runs are background `asyncio.Task`s that don't observe HTTP-client disconnects. If the user navigates away mid-run, the task keeps going, the bus keeps publishing, and the queue keeps buffering. The frontend needs a way to detect this on remount.
 
-Putting that signal in process memory (e.g. a `set[session_id]` of active runs) would not survive a backend restart and would require a separate inspection endpoint. Instead, `sessions.last_run_state` is set to `running` before the task is spawned and to `completed` / `error` in the task's `finally` block. The session-detail response already exists, so the frontend learns the state for free on its existing mount call. After detecting `running`, the page re-subscribes via the existing SSE endpoint — `EventBusRegistry.get_or_create` returns the still-open bus and `consume()` delivers the buffered tail.
+Putting that signal in process memory (e.g. a `set[session_id]` of active runs) would not survive a backend restart and would require a separate inspection endpoint. Instead, `sessions.last_run_state` is set to `running` before the task is spawned and to `completed` / `error` in the task's `finally` block. The session-detail response already exists, so the frontend learns the state for free on its existing mount call. After detecting `running`, the page re-subscribes via the existing SSE endpoint - `EventBusRegistry.get_or_create` returns the still-open bus and `consume()` delivers the buffered tail.
 
-### Final-message typewriter is gated by a deferred commit
+### Final-message reveal is gated by a RAF-paced commit poll
 
-The Lead emits `final_message` and `run_complete` back-to-back from the `finalize` branch. If the frontend processed `run_complete` naively — replacing the live streaming bubble with the persisted bubble — the typewriter animation would never run, because the live `streamingText` would be cleared within tens of milliseconds.
+The Lead emits `final_message` and `run_complete` back-to-back from the `finalize` branch (and, separately, streams `finalize.result` token-by-token as `text_delta` events while the tool call is being decoded - see [backend/orchestrator/lead.py](backend/orchestrator/lead.py)). If the frontend processed `run_complete` naively - replacing the live streaming bubble with the persisted bubble - the paced reveal would never complete, because the live `streamingText` would be cleared within tens of milliseconds.
 
-The fix is a single ref (`pendingCommitRef`) that holds the post-`run_complete` flush as a closure. The flush only runs when the typewriter's `onComplete` callback fires (i.e. `displayed.length === target.length`), guaranteeing the user sees the recap type out before the bubble hands off to its persisted form. The on-close handler short-circuits when a commit is pending so it can't clobber the live state on stream-end.
+The fix lives in [frontend/app/sessions/[id]/page.tsx](frontend/app/sessions/[id]/page.tsx) as an RAF-based pacing loop:
+
+1. SSE deltas append into `accumulatedText` / `accumulatedThinking` buffers.
+2. A `requestAnimationFrame` `tick()` advances `displayedText` / `displayedThinking` toward those buffers at fixed character rates (`TEXT_CHARS_PER_SEC = 95`, `FINAL_TEXT_CHARS_PER_SEC = 110` after `final_message`, `THINKING_CHARS_PER_SEC = 90`), with a per-frame cap and a soft catch-up branch for long tails.
+3. On `run_complete`, the page sets a `commitStarted` flag and either calls `commit()` immediately (if `pacingDone()`) or installs a `commitPollId` `setInterval` (80 ms) that waits for `pacingDone()` (or a dynamic timeout) before calling `commit()`.
+4. `commit()` performs the streaming → persisted swap: it flushes the pacing buffers, calls `getSession()`, replaces the live bubble with the persisted message, and (after a 600 ms gap) opens the artifact preview canvas.
+5. The SSE `onClose` callback short-circuits when `commitStarted` is true so it can't cancel the in-flight pacing or refetch and clobber fresh state.
 
 ### SQLite over Postgres
 
@@ -308,3 +315,5 @@ Single-user, local-first deployment. SQLite with WAL mode handles concurrent asy
 | [cli.py](cli.py) | CLI (async orchestrator) |
 | [UAT/25April_UAT Checklist.md](UAT/25April_UAT%20Checklist.md) | UAT v2.1 test pass + issue log |
 | [UAT/25April_UAT_Resolution_Plan.md](UAT/25April_UAT_Resolution_Plan.md) | Per-issue root cause + resolution + verification (drives 2.2) |
+| [UAT/May_UAT_Checklist.md](UAT/May_UAT_Checklist.md) | UAT v2.3.3 test pass + new-feature criteria |
+| [UAT/UAT_CHECKLIST.md](UAT/UAT_CHECKLIST.md) | Evergreen master UAT checklist |

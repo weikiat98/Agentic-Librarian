@@ -30,7 +30,9 @@ class SessionOut(BaseModel):
     pinned: bool = False
     audience: str = "professional"
     # Tracks whether a run is in flight so the frontend can re-attach the SSE
-    # stream after a navigation away. Values: idle | running | completed | error.
+    # stream after a navigation away. Values: idle | running | completed |
+    # error | cancelled. `cancelled` is set when POST /cancel was honoured by
+    # the Lead loop.
     last_run_state: str = "idle"
 
     model_config = {"from_attributes": True}

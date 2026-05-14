@@ -163,7 +163,8 @@ async def _init_db(db: aiosqlite.Connection) -> None:
         )
     if "last_run_state" not in cols:
         # Track whether a run is in flight so the frontend can re-attach the
-        # SSE stream after a navigation away. Values: idle | running | completed | error.
+        # SSE stream after a navigation away.
+        # Values: idle | running | completed | error | cancelled.
         await db.execute(
             "ALTER TABLE sessions ADD COLUMN last_run_state TEXT NOT NULL DEFAULT 'idle'"
         )

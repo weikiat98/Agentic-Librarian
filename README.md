@@ -12,6 +12,7 @@ Every claim in every answer carries a citation. Every citation is clickable. Eve
 
 - [What it does](#what-it-does)
 - [What's new in 2.3.3](#whats-new-in-233)
+- [Product features](#product-features)
 - [Simplified architecture](#simplified-architecture)
 - [Models and cost architecture](#models-and-cost-architecture)
 - [Project structure](#project-structure)
@@ -54,7 +55,7 @@ Conversation continuity, token-meter accuracy, and streaming robustness fixes.
 
 ---
 
-
+## Product features
 
 - **Splash → Home → Session flow**. a three-page app: landing splash, a home screen with greeting + draft upload, and per-session chat pages.
 - **Persistent chat sidebar**. list, pin, rename, and delete sessions; titles auto-generated from the first user message.
@@ -182,8 +183,8 @@ constellation/
 
 ## Requirements
 
-- **Backend**. Python 3.11+, an `ANTHROPIC_API_KEY`.
-- **Frontend**. Node.js 20+.
+- **Backend**: Python 3.11+, an `ANTHROPIC_API_KEY`.
+- **Frontend**: Node.js 20+.
 
 ---
 
@@ -196,13 +197,13 @@ constellation/
 | `NEXT_PUBLIC_SSE_BASE` | No | `http://<host>:8000` | Base URL the browser uses to connect to the SSE stream. Useful when the backend runs on a non-default host/port. |
 | `ADVISOR_MODEL` | No | *(empty. disabled)* | Enables the Advisor tool on the Lead executor. Set to `claude-opus-4-7` to let the Lead consult a stronger model up to 3 times per run. Leave unset for strict cost control. |
 
-Example. run everything on Haiku to minimise cost (lower Lead quality):
+Example: run everything on Haiku to minimise cost (lower Lead quality):
 
 ```bash
 export ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 ```
 
-Example. upgrade the Lead to Opus for production quality:
+Example: upgrade the Lead to Opus for production quality:
 
 ```bash
 export ANTHROPIC_MODEL=claude-opus-4-6
@@ -288,11 +289,11 @@ Type your question and hit Enter (or click the send button). The app navigates t
 
 **What you see:**
 
-- **Chat pane**. streaming final answer with inline `[chunk_id]` citations.
-- **Thinking panel**. collapsible; shows Lead and subagent reasoning as it happens.
-- **Agent Trace**. live tree of agent spawns, tool calls, artifact writes, and compaction events.
-- **Context Meter**. token usage bar. A Compact button lets you trigger manual compaction.
-- **Artifact Preview**. when the Lead calls `write_artifact`, the result slides in as a canvas beside the chat.
+- **Chat pane**: streaming final answer with inline `[chunk_id]` citations.
+- **Thinking panel**: collapsible; shows Lead and subagent reasoning as it happens.
+- **Agent Trace**: live tree of agent spawns, tool calls, artifact writes, and compaction events.
+- **Context Meter**: token usage bar. A Compact button lets you trigger manual compaction.
+- **Artifact Preview**: when the Lead calls `write_artifact`, the result slides in as a canvas beside the chat.
 
 **What happens inside:**
 
@@ -313,7 +314,7 @@ Click any inline `[chunk_id]` citation. a **Source Drawer** slides in with the e
 - **Cancel** a running answer. `POST /api/sessions/{id}/cancel` stops the in-flight run at its next iteration; the SSE stream closes cleanly and `last_run_state` transitions to `cancelled`.
 - **Rename** the session via the pencil icon in the header.
 - **Pin** sessions from the sidebar.
-- **Delete documents**. trash icon in the Session files popover removes an uploaded document (refused with 409 if the document is referenced by a persisted message).
+- **Delete documents**: trash icon in the Session files popover removes an uploaded document (refused with 409 if the document is referenced by a persisted message).
 - **Compact** long sessions manually, or let it fire automatically at 85% of the 200K window.
 
 ---

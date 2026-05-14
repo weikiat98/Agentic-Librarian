@@ -1,4 +1,4 @@
-# Technical Documentation — Constellation
+# Technical Documentation: Constellation
 
 Comprehensive technical reference for developers working with Constellation. For a user-facing guide see [README.md](README.md); for a higher-level architectural overview see [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -48,9 +48,9 @@ Comprehensive technical reference for developers working with Constellation. For
 
 Constellation is a three-tier application:
 
-1. **Frontend** — Next.js 15 App Router + React 19 + Tailwind. Single-page experience across Splash (`/`), Home (`/home`), and Session (`/sessions/[id]`).
-2. **Backend** — FastAPI running on `uvicorn`, exposing REST + Server-Sent Events (SSE). All I/O is async; SQLite access goes through `aiosqlite`.
-3. **Agent orchestration** — an async orchestrator-workers pattern built on the Anthropic SDK. A Lead agent (Sonnet by default, Opus for production) plans, calls tools, and spawns SubAgents (Haiku) that run in parallel via `asyncio.gather`.
+1. **Frontend**: Next.js 15 App Router + React 19 + Tailwind. Single-page experience across Splash (`/`), Home (`/home`), and Session (`/sessions/[id]`).
+2. **Backend**: FastAPI running on `uvicorn`, exposing REST + Server-Sent Events (SSE). All I/O is async; SQLite access goes through `aiosqlite`.
+3. **Agent orchestration**: an async orchestrator-workers pattern built on the Anthropic SDK. A Lead agent (Sonnet by default, Opus for production) plans, calls tools, and spawns SubAgents (Haiku) that run in parallel via `asyncio.gather`.
 
 All persistent state lives in a single SQLite file (`deep_reading.db`) using WAL mode. An FTS5 virtual table backs keyword search. No external services are required beyond the Anthropic API.
 
@@ -80,6 +80,7 @@ All routes are mounted under `/api`. Base URL defaults to `http://localhost:8000
 | POST | `/api/sessions/{id}/documents` | 201 | Multipart upload; ingests + chunks + indexes the file. |
 | DELETE | `/api/sessions/{id}/documents/{document_id}` | 200 / 404 / 409 | Remove a document from the session. **409** if the document is referenced by any persisted message's `attached_document_ids` (would orphan chip rendering on past turns). |
 | POST | `/api/sessions/{id}/messages` | 202 | Submit user prompt. Body: `{ content: string, audience: "layperson"\|"professional"\|"expert", attached_document_ids?: string[] }`. Document IDs are persisted on the message so chip rendering survives reloads. Kicks off the agent run. |
+| POST | `/api/sessions/{id}/cancel` | 200 | Signal the in-flight Lead run to stop at its next iteration. Sets the per-session `asyncio.Event` checked by the Lead loop; the run exits cleanly and `last_run_state` transitions to `cancelled`. Idempotent — returns `{ cancelled: false, reason: "no run in flight" }` if no run is active. |
 | GET | `/api/sessions/{id}/stream` | 200 (SSE) | Server-Sent Events stream of agent events. |
 | GET | `/api/sessions/{id}/context` | 200 | Token usage estimate: `{ tokens, window, percent }`. Builds the full prompt overhead (rendered system prompt for the session's audience + tool definitions + doc index up to 50 chunks) so the value matches what a real run publishes in `context_usage` SSE events. Used to seed the context meter on session mount. |
 | POST | `/api/sessions/{id}/compact` | 200 | Manually trigger context compaction. |
@@ -96,7 +97,7 @@ All request/response bodies are typed via Pydantic v2 models in [backend/models.
 
 - `SessionCreate { title? }`
 - `SessionUpdate { title?, pinned?, audience? }` — audience is persisted on the session so reloads restore the user's last choice. (Note: `last_run_state` is set internally by `submit_message` and the `_run` finally block; it is not part of the public PATCH surface.)
-- `SessionOut { id, title, created_at, pinned, audience, last_run_state }` — `last_run_state` is one of `idle | running | completed | error`; the frontend reads it on session mount to decide whether to re-attach the SSE stream.
+- `SessionOut { id, title, created_at, pinned, audience, last_run_state }` — `last_run_state` is one of `idle | running | completed | error | cancelled`; the frontend reads it on session mount to decide whether to re-attach the SSE stream. (`cancelled` is set by the `_run` task's `finally` block when the per-session `asyncio.Event` was set via `POST /cancel`.)
 - `SessionDetail { session, messages, documents, artifacts }`
 - `MessageCreate { content, audience, attached_document_ids[] }` — `attached_document_ids` records which documents were attached at send time so chips re-render correctly after reload.
 - `MessageOut { id, session_id, role, content, token_usage?, created_at, artifact_ids[], thinking?, attached_document_ids[], attached_documents[] }` — `attached_documents` is hydrated from the documents table to filenames so the frontend can render chips without a second lookup.
@@ -143,9 +144,10 @@ Defined in [backend/orchestrator/lead.py](backend/orchestrator/lead.py). The Lea
 - **Max tokens per call**: 64,000.
 - **Tools available**: `search_document`, `read_document_chunk`, `resolve_reference`, `lookup_definition`, `spawn_subagent`, `write_artifact`, `finalize`.
 - **System prompt**: rendered by `build_system_prompt(audience)` (exported for use by token-counting endpoints). Augmented with the selected audience instruction and marked `cache_control: { type: "ephemeral" }` to enable prompt caching with a 1-hour TTL.
+- **Adaptive thinking**: when the configured `MODEL` is `claude-sonnet-4-6` or `claude-opus-4-7`, the Messages call passes `thinking={"type": "adaptive"}` so Claude decides per-request whether (and how much) to reason. Interleaved thinking is automatically enabled, so the model can reason between tool calls - important for multi-step agentic flows. Thinking blocks arrive as `thinking_delta` SSE events and are surfaced in the collapsible "Thinking" panel. Models that don't support adaptive thinking (e.g. Haiku) silently fall through with no `thinking` field on the request.
 - **Initial user content**: optionally preceded by prior chat history (see below), then a doc-index block (up to 50 chunks), an artifact catalogue (see below), and the user's question.
 
-**Conversation history replay.** Prior persisted user/assistant turns are prepended to the `messages` array before each run. Tool-use blocks are excluded — the recap text already references artifacts by name and chunks by UUID. Without this, follow-up prompts ("convert that to CSV", "extend point 3") produced hallucinated chunk IDs because the model had no memory of what it wrote in previous turns.
+**Conversation history replay.** Prior persisted user/assistant turns are prepended to the `messages` array before each run. Tool-use blocks are excluded - the recap text already references artifacts by name and chunks by UUID. Without this, follow-up prompts ("convert that to CSV", "extend point 3") produced hallucinated chunk IDs because the model had no memory of what it wrote in previous turns.
 
 **Artifact catalogue.** Existing session artifacts are listed under a `## Existing Artifacts In This Session` block in the initial user content (up to 400 chars of content preview per artifact). This lets the Lead acknowledge and reference prior artifacts on follow-up requests without re-running the full document pipeline.
 
@@ -162,13 +164,14 @@ On each iteration the Lead:
    - Other tools are dispatched through `handle_tool(...)` in [backend/orchestrator/tools.py](backend/orchestrator/tools.py).
 5. Appends the assistant turn and tool results to `messages` and continues.
 
-**Finalize contract.** The Lead's system prompt forces `finalize.result` to be a substantive user-facing recap, not a one-liner. If the Lead calls `write_artifact` and returns an empty or trivially short (`len < 500`) `result`, the `finalize` branch in [backend/orchestrator/lead.py:303](backend/orchestrator/lead.py#L303) backfills a fallback pointing at the artifact name(s) so the UI never shows a blank message.
+**Finalize contract.** The Lead's system prompt forces `finalize.result` to be a substantive user-facing recap, not a one-liner. If the Lead calls `write_artifact` and returns an empty or trivially short (`len(result.strip()) < 500`) `result`, the `finalize` branch in [backend/orchestrator/lead.py](backend/orchestrator/lead.py) backfills a fallback pointing at the artifact name(s) so the UI never shows a blank message.
 
-**`finalize`-miss recovery ladder.** If the loop exits without `finalize` ever being called (iteration cap hit, `stop_reason` something other than `tool_use`/`end_turn`, model returned only tool calls with no text), [lead.py:389](backend/orchestrator/lead.py#L389) walks three tiers:
+**`finalize`-miss recovery ladder.** If the loop exits without `finalize` ever being called (iteration cap hit, `stop_reason` something other than `tool_use`/`end_turn`, model returned only tool calls with no text, or the user cancelled mid-run), the post-loop block in [lead.py](backend/orchestrator/lead.py) walks four tiers:
 
-1. Scrape trailing `text` blocks from the last response.
+1. Scrape trailing `text` blocks from the last response (filtered to `block.type == "text"` so beta non-text blocks like `server_tool_use` / `advisor_tool_result` don't `AttributeError`).
 2. If artifacts were produced this turn, backfill a recap pointing the user at them.
-3. Last resort: explicit "couldn't produce an answer, try Retry" message. Never persist an empty string.
+3. If the run was user-cancelled (the per-session `asyncio.Event` is set) and nothing else produced a body, persist a "Run stopped - click Retry" message so the cancellation has a meaningful bubble.
+4. Last resort: explicit "couldn't produce an answer, try Retry" message. Never persist an empty string.
 
 Additionally, when `stop_reason == "end_turn"` and the model returned plain text (a chat-style answer instead of calling `finalize`), the Lead publishes a `thinking_clear` event before re-emitting the text as the user-facing message, so the same content isn't shown twice.
 
@@ -193,7 +196,7 @@ Output is streamed as `thinking_delta` (not `text_delta`) because the Lead consu
 | `resolve_reference` | Look up a chunk by its `section_id` (cross-reference resolution). | `document_id`, `section_id` |
 | `lookup_definition` | Case-insensitive lookup of a defined term previously extracted. | `document_id`, `term` |
 | `spawn_subagent` | Run a focused subagent in parallel with an isolated context. | `role`, `task`, `chunk_ids[]` |
-| `write_artifact` | Persist a named artifact (Markdown/HTML/CSV/plain text) with optional citations. | `name`, `content`, `mime_type?`, `citations?` |
+| `write_artifact` | Persist a named artifact with optional citations. `mime_type` is one of `text/plain` (default), `text/markdown`, `text/html`, `text/csv`; unknown values are coerced to `text/plain` by the handler. | `name`, `content`, `mime_type?`, `citations?` |
 | `finalize` | End the run and return the final user-facing answer. | `result` |
 
 All schemas are the JSON Schemas sent to Claude in `LEAD_TOOLS`. See [backend/orchestrator/tools.py](backend/orchestrator/tools.py).
@@ -202,9 +205,9 @@ All schemas are the JSON Schemas sent to Claude in `LEAD_TOOLS`. See [backend/or
 
 Two checks are applied to every subagent result before it is returned to the Lead:
 
-**Check 1 — Presence** ([backend/orchestrator/subagent.py](backend/orchestrator/subagent.py)): the result text is scanned with `_CITATION_RE = re.compile(r'\[[0-9a-fA-F\-]{36}\]')`. If no UUID-shaped token is found, `citations_present: false` is set.
+**Check 1: Presence** ([backend/orchestrator/subagent.py](backend/orchestrator/subagent.py)): the result text is scanned with `_CITATION_RE = re.compile(r'\[[0-9a-fA-F\-]{36}\]')`. If no UUID-shaped token is found, `citations_present: false` is set.
 
-**Check 2 — Validity** ([backend/orchestrator/subagent.py](backend/orchestrator/subagent.py)): every UUID extracted by the regex is looked up in the database via `get_chunk`. Any UUID that returns `None` is a hallucinated chunk ID — one the model invented rather than drew from the index it was given. `citations_valid: false` is set and the offending IDs are collected in `invalid_citation_ids`.
+**Check 2: Validity** ([backend/orchestrator/subagent.py](backend/orchestrator/subagent.py)): every UUID extracted by the regex is looked up in the database via `get_chunk`. Any UUID that returns `None` is a hallucinated chunk ID - one the model invented rather than drew from the index it was given. `citations_valid: false` is set and the offending IDs are collected in `invalid_citation_ids`.
 
 Both flags and the list of invalid IDs are forwarded to the Lead inside the `tool_result` content block, along with a plain-English `note` field. The Lead's system prompt instructs it not to synthesize from a result where either flag is false, and to re-spawn the task instead.
 
@@ -218,8 +221,8 @@ Implemented in [backend/orchestrator/compactor.py](backend/orchestrator/compacto
 
 - **Window**: 200,000 tokens (matches Claude's context window on the configured models).
 - **Threshold**: 85% (≈170K tokens) triggers automatic compaction.
-- **Target**: ~20% after compaction.
-- **Strategy**: keep the last `max(4, len(messages) // 5)` messages verbatim; summarise everything before into a structured memory via a Haiku Messages call.
+- **Target**: ~20% of history retained after compaction (a `TARGET_AFTER = 0.20` constant is defined but the keep-tail rule below produces this proportion implicitly; the constant is currently unused).
+- **Strategy**: keep the last `max(4, len(messages) // 5)` messages verbatim; summarise everything before into a structured memory via a Haiku Messages call. Non-string content blocks (tool results, SDK objects) in the prefix are stringified and truncated at 4000 chars (`_BLOCK_CAP`) so subagent findings aren't lost from the summary input.
 - Output replaces the compacted prefix with two synthetic messages: `[COMPACTED SESSION HISTORY]\n{summary}` (user) and `Understood. Continuing from the compacted history.` (assistant).
 - A `compaction_done` event with `before_tokens` and `after_tokens` is published, and the corresponding trace row is persisted.
 
@@ -253,7 +256,7 @@ Three uses per run is intentional — it maps to the three natural decision poin
 
 **Token accounting.** Advisor iterations are billed at the advisor model's rate, not the executor's. The Lead accumulates advisor tokens into its own `tokens_in` / `tokens_out` via `response.usage.iterations` (accessed with `getattr` because the field isn't in the typed SDK schema yet). This keeps the per-turn totals correct in the context meter and `agent_runs` table.
 
-**Safety caveat.** The advisor must be at least as capable as the executor — setting it to a weaker model makes no sense. The recommended configuration is Haiku executor + Opus advisor.
+**Safety caveat.** The advisor must be at least as capable as the executor - setting it to a weaker model makes no sense. The recommended configuration is Haiku executor + Opus advisor.
 
 ---
 
@@ -276,12 +279,12 @@ The SSE endpoint ([backend/app.py](backend/app.py)) returns a `StreamingResponse
 | --- | --- | --- |
 | `agent_spawned` | `agent_id`, `role`, `parent` | New agent started. `parent` is `null` for the Lead, `"lead"` or a UUID for subagents. |
 | `thinking_delta` | `agent_id`, `delta` | Streaming reasoning/planning text. |
-| `thinking_clear` | `agent_id` | UI-only signal: tells the frontend to drop the live Thinking panel display. Fired when the Lead ends a turn with `stop_reason == "end_turn"` (plain-text response instead of `finalize`) so the same text isn't shown twice — once in Thinking, once as the final message. **Does NOT wipe the server-side `_thinking_buffer`** — that buffer is the historical record and must persist so the assistant message's `thinking` field is non-empty after `finalize`. |
-| `text_delta` | `agent_id`, `delta` | Legacy streaming chat text (still supported by the frontend for forward compatibility). |
+| `thinking_clear` | `agent_id` | UI-only signal: tells the frontend to drop the live Thinking panel display. Fired when the Lead ends a turn with `stop_reason == "end_turn"` (plain-text response instead of `finalize`) so the same text isn't shown twice - once in Thinking, once as the final message. **Does NOT wipe the server-side `_thinking_buffer`** - that buffer is the historical record and must persist so the assistant message's `thinking` field is non-empty after `finalize`. |
+| `text_delta` | `agent_id`, `delta` | Incremental chunks of `finalize.result` as the tool-call JSON streams in. Decoded from `input_json_delta` events and forwarded in ~24-char slices (`_publish_text_delta_smooth`) so the user-facing answer types out in real time during the Lead's finalize call. |
 | `final_message` | `content` | The authoritative final answer from the Lead. Emitted once. |
 | `tool_use` | `agent_id`, `tool`, `input` | Agent called a tool with the given input. |
 | `artifact_written` | `artifact_id`, `name` | Artifact persisted. |
-| `agent_done` | `agent_id`, `summary` | Subagent finished; `summary` is the first 200 chars of its output. |
+| `agent_done` | `agent_id`, `summary` | Subagent finished; `summary` carries up to 2000 chars of its output (raised from 200 in 2.2), with an ellipsis appended if truncated. |
 | `run_complete` | `final` | Full Lead run finished. Triggers client stream close. |
 | `context_usage` | `tokens`, `window`, `percent` | Context meter update. |
 | `compaction_done` | `before_tokens`, `after_tokens` | Compaction completed. |
@@ -332,7 +335,7 @@ definitions(id, document_id FK, term, definition, source_chunk_id)
 cross_refs(id, document_id FK, from_chunk_id, to_section_id)
 
 -- Agent outputs
-artifacts(id, session_id FK, name, content, mime_type DEFAULT 'text/markdown', citations_json)
+artifacts(id, session_id FK, name, content, mime_type DEFAULT 'text/plain', citations_json)
 agent_runs(id, session_id FK, parent_agent_id, role, status, tokens_in, tokens_out)
 
 -- Persisted trace events
@@ -355,10 +358,10 @@ There is no migration framework. Lightweight inline migrations run in `_init_db`
 - `sessions.pinned INTEGER DEFAULT 0` — added in 2.0.
 - `sessions.audience TEXT NOT NULL DEFAULT 'professional'` — added in 2.1.
 - `sessions.last_run_state TEXT NOT NULL DEFAULT 'idle'` — added in 2.2 to support multi-session SSE re-attach. Values: `idle | running | completed | error | cancelled`.
-- `documents.original_filename TEXT` — added in 2.0; backfilled from `filename`.
-- `messages.artifact_ids_json TEXT` — added in 2.0 for per-turn artifact linkage.
-- `messages.thinking TEXT` — added in 2.0 for persisted reasoning trace.
-- `messages.attached_document_ids_json TEXT` — added in 2.2 so per-message document chips re-render correctly after reload.
+- `documents.original_filename TEXT`: added in 2.0; backfilled from `filename`.
+- `messages.artifact_ids_json TEXT`: added in 2.0 for per-turn artifact linkage.
+- `messages.thinking TEXT`: added in 2.0 for persisted reasoning trace.
+- `messages.attached_document_ids_json TEXT`: added in 2.2 so per-message document chips re-render correctly after reload.
 
 No schema changes in 2.3.x. The `get_chunks_for_document(document_id, limit?)` helper gained an optional `limit` parameter in 2.3.3 (SQL-level `LIMIT ?`); callers that previously sliced results in Python now delegate to the database.
 
@@ -370,11 +373,11 @@ Schema changes are idempotent because every DDL is `CREATE TABLE IF NOT EXISTS` 
 
 Entry point: `DocumentStore.ingest(session_id, file_path, original_filename?)` in [backend/store/documents.py](backend/store/documents.py).
 
-1. **Load** — `DocumentLoader.load_document(path)` in [document_loader.py](document_loader.py) dispatches by extension (PDF via PyPDF2, DOCX via python-docx, TXT / MD / HTML via built-ins).
-2. **Chunk** — `DocumentChunker(max_chunk_tokens=4000)` in [document_chunker.py](document_chunker.py) detects page / chapter / section structure and emits semantic chunks with metadata (default 4,000 tokens ≈ 16,000 chars).
-3. **Create document** — inserts a row with the user-facing `original_filename`. Display names always flow through so the UI never surfaces the OS temp path.
-4. **Insert chunks** — each chunk becomes a row in `chunks`; FTS5 triggers index it automatically. `section_id` and `page` are derived from the chunker's metadata when available.
-5. **Kick off extractors** — the REST handler schedules `extract_definitions` and `extract_cross_refs` as background `asyncio.Task`s so the HTTP response can return immediately.
+1. **Load**: `DocumentLoader.load_document(path)` in [document_loader.py](document_loader.py) dispatches by extension (PDF via PyPDF2, DOCX via python-docx, TXT / MD / HTML via built-ins).
+2. **Chunk**: `DocumentChunker(max_chunk_tokens=4000)` in [document_chunker.py](document_chunker.py) detects page / chapter / section structure and emits semantic chunks with metadata (default 4,000 tokens ≈ 16,000 chars).
+3. **Create document**: inserts a row with the user-facing `original_filename`. Display names always flow through so the UI never surfaces the OS temp path.
+4. **Insert chunks**: each chunk becomes a row in `chunks`; FTS5 triggers index it automatically. `section_id` and `page` are derived from the chunker's metadata when available.
+5. **Kick off extractors**: the REST handler schedules `extract_definitions` and `extract_cross_refs` as background `asyncio.Task`s so the HTTP response can return immediately.
 
 The backend always writes the upload to a `tempfile.NamedTemporaryFile` first, ingests from there, and `os.unlink`s the temp file in `finally`. The original filename travels through as a separate argument.
 
@@ -382,8 +385,8 @@ The backend always writes the upload to a `tempfile.NamedTemporaryFile` first, i
 
 ## 7. Extractors
 
-- **Definitions** — [backend/extractors/definitions.py](backend/extractors/definitions.py). Regex + heuristics to identify "Licensee means…", "Effective Date: …", and similar patterns common in legal/policy text. Writes into the `definitions` table for `lookup_definition`.
-- **Cross-references** — [backend/extractors/cross_refs.py](backend/extractors/cross_refs.py). Detects phrases like "see Section 4.2", "Article 12(3)", etc. Writes into `cross_refs`, keyed `(document_id, from_chunk_id, to_section_id)` so `resolve_reference` can jump from a mention to the referenced chunk.
+- **Definitions**: [backend/extractors/definitions.py](backend/extractors/definitions.py). Regex matching for **quoted defined-term** patterns common in legal/policy text: `"term" means …`, `"term" shall mean …`, `"term" refers to …`, `"term" is defined as …`, `"term" has the meaning …`. Unquoted forms (e.g. `Licensee means …`) and colon-based definitions (`Effective Date: …`) are not matched. The definition body is non-greedy, capped at 10–500 chars, and terminated by `;` or a blank line so multi-sentence definitions survive intact. Results are written into the `definitions` table for `lookup_definition`.
+- **Cross-references**: [backend/extractors/cross_refs.py](backend/extractors/cross_refs.py). Detects `Section`, `Article`, `Clause`, `Part`, `Schedule`, `Annex`, `Paragraph`, `Regulation`, `Rule`, and `Subsection` mentions followed by a numeric reference of the form `\d+(?:\([a-z0-9]+\))*` with optional `and`/`to` ranges (e.g. `Section 4(2)`, `Article 12(b)`, `Clause 3 to 5`). Dot-form references like `Section 4.2` are captured only as `Section 4` - only the integer portion is recognised. Writes into `cross_refs`, keyed `(document_id, from_chunk_id, to_section_id)` so `resolve_reference` can jump from a mention to the referenced chunk.
 
 Both extractors are best-effort and run after ingest. A failure does not block the upload.
 
@@ -399,25 +402,29 @@ Both extractors are best-effort and run after ingest. A failure does not block t
 | `/home` | [frontend/app/home/page.tsx](frontend/app/home/page.tsx) | Greeting + audience toggle + draft upload + prompt bar. |
 | `/sessions/[id]` | [frontend/app/sessions/[id]/page.tsx](frontend/app/sessions/%5Bid%5D/page.tsx) | Chat, trace, artifact preview, source drawer. |
 
-**Draft session handoff.** On `/home`, typing a prompt creates a session if none exists, then navigates to `/sessions/<id>?prompt=<text>&audience=<a>`. The session page detects these query params on mount, appends the user message, opens the SSE stream, and fires the POST — then immediately replaces the URL (without query params) via `router.replace`.
+**Draft session handoff.** On `/home`, typing a prompt creates a session if none exists, then navigates to `/sessions/<id>?prompt=<text>&audience=<a>`. The session page detects these query params on mount, appends the user message, opens the SSE stream, and fires the POST - then immediately replaces the URL (without query params) via `router.replace`.
 
 ### 8.2 State model for the session page
 
 Managed with React `useState` hooks. Key pieces of state:
 
 - `session`, `messages`, `documents`, `artifacts` — hydrated from `GET /api/sessions/{id}`. Each `Message` carries `attached_documents` (resolved filenames), so the chip render is purely declarative.
-- `traceEntries` — hydrated from `GET /api/sessions/{id}/trace` on mount, appended live from SSE events.
-- `streamingText` — the in-progress final answer during a run (replaced wholesale by `final_message`).
-- `thinkingText` — accumulated `thinking_delta` text.
-- `isStreaming` — true while SSE is active. Disables send, Compose, and retry/edit controls.
-- `liveContextPercent` — seeded from `/context`, updated from `context_usage` events.
-- `drawerChunkId`, `previewArtifact`, `uploadOpen`, `editingTitle`, `titleDraft` — UI state.
+- `traceEntries`: hydrated from `GET /api/sessions/{id}/trace` on mount, appended live from SSE events.
+- `streamingText`: the in-progress final answer during a run (replaced wholesale by `final_message`).
+- `thinkingText`: accumulated `thinking_delta` text.
+- `isStreaming`: true while SSE is active. Disables send, Compose, and retry/edit controls.
+- `liveContextPercent`: seeded from `/context`, updated from `context_usage` events.
+- `drawerChunkId`, `previewArtifact`, `uploadOpen`, `editingTitle`, `titleDraft`: UI state.
 
 Refs (not state — don't trigger re-renders):
 
-- `stopRef` — current `EventSource` unsubscriber. Cleared by `handleStop` and by the unmount effect so navigating between sessions doesn't leak connections.
-- `didAttachInitial` — guards against double-attach on the first mount (handoff prompt vs. running-run reattach).
-- `pendingCommitRef` — holds the deferred `run_complete` flush until the typewriter finishes revealing the recap. See *Deferred-commit pattern* above.
+- `stopRef`: current `EventSource` unsubscriber (also cancels the pacing RAF and commit-poll interval via the closure assigned in `attachStream`). Cleared by `handleStop` and by the unmount effect so navigating between sessions doesn't leak connections.
+- `uploadCloseTimerRef`: debounces the upload zone auto-close.
+- `didAttachInitial`: guards against double-attach on the first mount (handoff prompt vs. running-run reattach).
+- `didHydrateAudienceForSession`: limits server-audience hydration to once per session id so search-param-only rerenders can't clobber a freshly toggled audience.
+- `audienceRef`: keeps the mount effect's closure free of `audience` as a dependency, so manual toggles don't re-fire the effect (and trigger extra `getSession` round-trips).
+
+The post-`run_complete` flush is **not** held in a ref. It runs from a closure created inside `attachStream`, gated by either an immediate `pacingDone()` check or a `commitPollId` interval that polls until pacing catches up. See *Streaming strategy* below.
 
 `ChatMessage` was widened in 2.2 to include a transient `role: "system"` variant with `systemKind: "audience_change"`, rendered as a centred italic banner (`~ switched to layperson mode ~`). System messages are not persisted — they live in client state only and are emitted on explicit toggle clicks and on prompt-inferred audience switches.
 
@@ -425,7 +432,7 @@ Refs (not state — don't trigger re-renders):
 
 **Artifact reveal sequence (2.3.3).** `setRunArtifactIds` is no longer called from the `artifact_written` handler. Instead, IDs are buffered in a local `runArtifactIds` array and the "Generated files" button only appears when `commit()` swaps the streaming bubble for the persisted message (step 2). The artifact preview canvas opens 600 ms after that (step 3), giving the button time to render before the canvas slides in. This eliminates the layout shift that made long answers appear to stop mid-sentence.
 
-**Token counter caching (2.3.3).** `ChatPane` maintains a `baseTokenCacheRef` that holds the last fetched `{ base_tokens, window, docKey }`. The base count is refetched from `POST /count_tokens` (with empty content) only when the document set changes or `isStreaming` flips from `true` to `false`. Keystrokes compute `prompt_tokens = Math.ceil(input.length / 4)` locally and derive `total_tokens = base_tokens + prompt_tokens` without a network round-trip. `ContextMeter` no longer fetches `GET /context` independently — it receives `totalTokens` and `window` props from `ChatPane`.
+**Token counter caching (2.3.3).** `ChatPane` maintains a `baseTokenCacheRef` that holds the last fetched `{ base_tokens, window, docKey }`. The base count is refetched from `POST /count_tokens` (with empty content) only when the document set changes or `isStreaming` flips from `true` to `false`. Keystrokes compute `prompt_tokens = Math.ceil(input.length / 4)` locally and derive `total_tokens = base_tokens + prompt_tokens` without a network round-trip. `ContextMeter` no longer fetches `GET /context` independently - it receives `totalTokens` and `window` props from `ChatPane`.
 
 ### 8.3 Streaming strategy
 
@@ -433,28 +440,33 @@ The SSE client in [frontend/lib/sse.ts](frontend/lib/sse.ts) connects **directly
 
 Event dispatch:
 
-- `thinking_delta` → appended to `thinkingText`; rendered in a collapsible "Thinking…" block inside the current assistant message slot.
-- `thinking_clear` → resets the **client-side** `thinkingText` so the Lead's plain-text end-of-turn response isn't duplicated (once in Thinking, once as the final message). The server-side buffer in `SessionEventBus` is *not* cleared — it's needed to persist a non-empty `thinking` field on the committed assistant message.
-- `text_delta` (legacy) → accumulated as `streamingText`.
-- `final_message` → wholesale replaces `streamingText` with the authoritative answer. The `useTypewriter` hook in [ChatPane](frontend/components/ChatPane.tsx) then progressively reveals it client-side at ~150 chars / second.
-- `artifact_written` → reloaded via `GET /api/sessions/{id}` so the full artifact body is available for the preview canvas; the newest artifact is auto-opened.
-- `run_complete` → **deferred commit** (see below).
-- `error` → appends an error message and clears streaming state.
+- `thinking_delta` → appended to `accumulatedThinking`; paced into the visible `thinkingText` by the RAF tick (see below).
+- `thinking_clear` → resets `accumulatedThinking` / `displayedThinking` so the Lead's plain-text end-of-turn response (or `finalize` recap) isn't duplicated - once in Thinking, once as the final message. The server-side buffer in `SessionEventBus` is *not* cleared - it's needed to persist a non-empty `thinking` field on the committed assistant message.
+- `text_delta` → appended to `accumulatedText`. On the **first** delta, any remaining thinking buffer is cleared so the transition from Thinking → Answer is seamless. This is the primary streaming channel for the user-facing answer (the backend publishes it as `finalize.result` token-streams in via `input_json_delta`).
+- `final_message` → updates `accumulatedText` to the authoritative content. If `displayedText` has already overrun the new buffer (rare - a corrected/trimmed final message), the displayed prefix is trimmed back to the longest common agreement with the new buffer instead of snapping all the way to zero. Pacing then continues toward the new target.
+- `artifact_written` → IDs are buffered in a local `runArtifactIds` array. The "Generated files" button and preview canvas are revealed by `commit()` (step 2 and step 3 of the three-step reveal), not from this handler. See *Artifact reveal sequence* in 8.2.
+- `run_complete` → **RAF-paced commit poll** (see below).
+- `error` → appends an `ErrorBanner` message and clears streaming state.
 
-If the EventSource closes without a `run_complete` (e.g. network blip), the `onClose` callback first checks `pendingCommitRef`; if there is no pending commit it refetches session detail and commits whatever the backend persisted, so nothing is lost silently.
+If the EventSource closes without a `run_complete` (e.g. network blip), the `onClose` callback first checks `commitStarted`; if a commit is already in progress it short-circuits (otherwise `cancelPendingFlushes()` would strand the bubble in a partial-text state). When no commit has started it refetches session detail and commits whatever the backend persisted, so nothing is lost silently.
 
-#### Deferred-commit pattern for `run_complete`
+#### RAF-paced commit poll for `run_complete`
 
-The backend publishes `final_message` and `run_complete` back-to-back in the `finalize` branch ([backend/orchestrator/lead.py](backend/orchestrator/lead.py)). If `run_complete` were processed naively — replacing the live streaming bubble with the persisted bubble from `getSession()` — the typewriter would never have a chance to animate, because the live `streamingText` would be cleared within tens of milliseconds of being set.
+The backend publishes `text_delta` chunks of `finalize.result` (token-streamed), then `final_message`, then `run_complete` from the `finalize` branch ([backend/orchestrator/lead.py](backend/orchestrator/lead.py)). If `run_complete` were processed naively - replacing the live streaming bubble with the persisted bubble from `getSession()` - the paced reveal would be cut off, because the live `streamingText` would be cleared within tens of milliseconds of being set.
 
-The session page solves this with a `pendingCommitRef`:
+The session page ([frontend/app/sessions/[id]/page.tsx](frontend/app/sessions/[id]/page.tsx)) solves this with an RAF-based pacing scheduler and a deferred commit:
 
-1. On `run_complete`, the page fetches authoritative session detail and **stashes** the flush as a closure in `pendingCommitRef.current` instead of running it immediately.
-2. The `useTypewriter` hook tracks `displayed.length` versus `target.length` and fires its `onComplete` callback exactly once per fully-revealed recap.
-3. `onComplete` invokes the stashed flush, which calls `setMessages(...)`, clears `streamingText` / `thinkingText`, and sets `isStreaming = false` — handing off cleanly from the live streaming bubble to the persisted bubble.
-4. The on-close handler also early-returns when a pending commit is present so it can't clobber the live state mid-animation.
-
-The empty-recap edge case (rare — a `finalize` with empty `result` that the backfill catches) flushes immediately because there is nothing to type out.
+1. **Pacing.** `tick(ts)` is a `requestAnimationFrame` callback that advances `displayedText` / `displayedThinking` toward the `accumulatedText` / `accumulatedThinking` buffers. Steady-state rates:
+   - `TEXT_CHARS_PER_SEC = 95` before `final_message`, `FINAL_TEXT_CHARS_PER_SEC = 110` after.
+   - `THINKING_CHARS_PER_SEC = 90`.
+   - Per-frame caps `TEXT_MAX_CHARS_PER_FRAME = 12` / `THINKING_MAX_CHARS_PER_FRAME = 16` bound burst recovery (e.g. after a tab returns from background).
+   - A soft catch-up branch kicks in when more than `SOFT_CATCHUP_THRESHOLD = 3000` chars are pending and `final_message` has not yet been seen.
+2. **`run_complete` handling.** Sets `commitStarted = true`, then either:
+   - calls `commit()` immediately if `pacingDone()` (displayed lengths equal accumulated lengths), or
+   - schedules a `commitPollId = setInterval(..., 80ms)` that re-checks `pacingDone()` until it returns true or a dynamic timeout (`max(4s, projected_pacing_duration + 3s)`, capped at 120s) elapses, then calls `commit()`.
+3. **`commit()`** flushes both buffers (`flushImmediate`), clears `liveContextPercent`, calls `getSession()`, replaces the streaming bubble with the persisted message (which carries `artifactIds`, mounting the "Generated files" button - step 2), clears `runArtifactIds`, and after a 600 ms gap opens the artifact preview canvas (step 3).
+4. **Stale-closure / unmount safety.** `cancelled` is a closure-local flag set by the `attachStream` teardown; `tick()` checks it before calling `setState` so an RAF scheduled before a retry/edit/navigation can't flash stale text into the new stream. The unmount effect calls `stopRef.current?.()`, which cancels both the RAF and the commit-poll interval.
+5. **Empty-recap edge case** (rare - a `finalize` with empty `result` that the lead-side backfill catches) flushes immediately because there is nothing to pace through.
 
 ### 8.4 Citation rendering and source drawer
 
@@ -466,10 +478,10 @@ Utility: [frontend/lib/citations.ts](frontend/lib/citations.ts). The chat render
 
 [frontend/components/ArtifactPreview.tsx](frontend/components/ArtifactPreview.tsx) is a flex-row sibling of the chat (not an overlay), so opening it shrinks the chat column instead of covering it. It supports:
 
-- **Markdown** — rendered with `react-markdown` + `remark-gfm` + `rehype-highlight`.
-- **HTML** — rendered in a sandboxed frame.
-- **CSV** — rendered as a table.
-- **Plain text** — preformatted.
+- **Markdown**: rendered with `react-markdown` + `remark-gfm` + `rehype-highlight`.
+- **HTML**: rendered in a sandboxed frame.
+- **CSV**: rendered as a table.
+- **Plain text**: preformatted.
 
 A download button saves the raw content with the artifact's MIME type.
 
@@ -482,7 +494,7 @@ A download button saves the raw content with the artifact's MIME type.
 Flow:
 
 1. Assert `ANTHROPIC_API_KEY` is set.
-2. `create_session(title=f"CLI: {filename}")` — each CLI invocation creates a fresh session row.
+2. `create_session(title=f"CLI: {filename}")` - each CLI invocation creates a fresh session row.
 3. `DocumentStore.ingest(...)` chunks and persists the document.
 4. Run extractors inline (not as background tasks).
 5. If `--interactive`, loop on stdin; otherwise run one request.
@@ -514,24 +526,24 @@ The database path is hard-coded to `deep_reading.db` in [backend/store/sessions.
 
 ## 11. Security and safety considerations
 
-- **FTS5 query injection** — neutralised by `_fts5_safe`; every LLM-generated `search_document` query is tokenised and quoted.
-- **File path safety** — uploads are always written to a `NamedTemporaryFile`. The user's original filename is carried as a separate argument; downstream code never uses it for disk I/O.
-- **Hook / shell command execution** — there is none. The app does not spawn child processes for document processing; PDF / DOCX parsing is in-process.
-- **CORS** — locked to `http://localhost:3000` and `http://127.0.0.1:3000`. Loosen only for deployments you control.
-- **API key exposure** — the key is read from `os.environ` in the orchestrator modules. It is never logged, never sent to the frontend, and never written to disk.
-- **Citation trust boundary** — subagent output is parsed for UUID citations but the backend does not validate that a cited chunk actually contains the claimed text. Users verify via the source drawer.
-- **Prompt injection** — documents may contain adversarial text ("ignore prior instructions…"). The Lead system prompt pins the citation requirement, and subagents are restricted to `read_document_chunk` only, so the blast radius of a successful injection is limited to incorrect prose in the final answer — the system cannot exfiltrate, execute code, or reach external resources.
+- **FTS5 query injection**: neutralised by `_fts5_safe`; every LLM-generated `search_document` query is tokenised and quoted.
+- **File path safety**: uploads are always written to a `NamedTemporaryFile`. The user's original filename is carried as a separate argument; downstream code never uses it for disk I/O.
+- **Hook / shell command execution**: there is none. The app does not spawn child processes for document processing; PDF / DOCX parsing is in-process.
+- **CORS**: locked to `http://localhost:3000` and `http://127.0.0.1:3000`. Loosen only for deployments you control.
+- **API key exposure**: the key is read from `os.environ` in the orchestrator modules. It is never logged, never sent to the frontend, and never written to disk.
+- **Citation trust boundary**: subagent output is parsed for UUID citations but the backend does not validate that a cited chunk actually contains the claimed text. Users verify via the source drawer.
+- **Prompt injection**: documents may contain adversarial text ("ignore prior instructions…"). The Lead system prompt pins the citation requirement, and subagents are restricted to `read_document_chunk` only, so the blast radius of a successful injection is limited to incorrect prose in the final answer - the system cannot exfiltrate, execute code, or reach external resources.
 
 ---
 
 ## 12. Performance notes
 
-- **Parallel subagents** — `asyncio.gather` means the wall-clock time for N subagents is ≈ the slowest one, not the sum.
-- **Prompt caching** — Anthropic ephemeral cache amortises the ~5–10K-token system prompts across a session.
-- **FTS5** — sub-millisecond keyword search even on long documents; `bm25(chunks_fts)` scoring is built in.
-- **Streaming** — the frontend renders deltas as they arrive; no buffering beyond the single React state update.
-- **SQLite WAL** — allows concurrent reads alongside a writer; adequate for single-user operation. For multi-user, consider Postgres + pgvector.
-- **Context compaction** — fires at 85%; the Haiku summariser is cheap (~4K tokens output max) and keeps the session alive indefinitely.
+- **Parallel subagents**: `asyncio.gather` means the wall-clock time for N subagents is ≈ the slowest one, not the sum.
+- **Prompt caching**: Anthropic ephemeral cache amortises the ~5–10K-token system prompts across a session.
+- **FTS5**: sub-millisecond keyword search even on long documents; `bm25(chunks_fts)` scoring is built in.
+- **Streaming**: the frontend renders deltas as they arrive; no buffering beyond the single React state update.
+- **SQLite WAL**: allows concurrent reads alongside a writer; adequate for single-user operation. For multi-user, consider Postgres + pgvector.
+- **Context compaction**: fires at 85%; the Haiku summariser is cheap (~4K tokens output max) and keeps the session alive indefinitely.
 
 Known limits:
 
