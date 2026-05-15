@@ -2,7 +2,7 @@
 
 ## What this project is
 
-Constellation is a full-stack multi-agent system for deep analysis of single documents (legal Acts, regulations, academic papers, compliance frameworks). It is **not** a corpus search tool — it is optimised for depth on 1–5 known documents.
+Constellation is a full-stack multi-agent system for deep analysis of single documents (legal Acts, regulations, academic papers, compliance frameworks). It is **not** a corpus search tool, it is optimised for depth on 1–5 known documents.
 
 Current version: **2.3.3**. Stack: Next.js 15 + React 19 (frontend), FastAPI + aiosqlite (backend), Anthropic SDK (agent orchestration).
 

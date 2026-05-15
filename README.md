@@ -1,6 +1,6 @@
 # Constellation
 
-A full-stack multi-agent system for deep analysis of lengthy and technical documents. legal regulations, academic papers, compliance frameworks, and policy documents. powered by the Anthropic API.
+A full-stack multi-agent system for deep analysis of lengthy and technical documents. legal regulations, academic papers, compliance frameworks, and policy documents. Powered by the Anthropic API.
 
 Every claim in every answer carries a citation. Every citation is clickable. Every source is verifiable.
 
@@ -80,27 +80,27 @@ Conversation continuity, token-meter accuracy, and streaming robustness fixes.
 ```text
 ┌────────────────────────────────────────────────────────────┐
 │  Frontend  (Next.js 15 + React 19 + Tailwind + shadcn/ui)  │
-│ . Splash → Home → Session                                 │
-│ . Sidebar | Chat + Thinking | Trace | Artifact canvas     │
-│ . SSE consumer, streaming renderer, citation drawer       │
-│ . Audience toggle, context meter, drag-and-drop upload    │
+│ . Splash → Home → Session                                  │
+│ . Sidebar | Chat + Thinking | Trace | Artifact canvas      │
+│ . SSE consumer, streaming renderer, citation drawer        │
+│ . Audience toggle, context meter, drag-and-drop upload     │
 └──────────────────────────────▲─────────────────────────────┘
                                │  HTTPS + SSE (direct to :8000)
 ┌──────────────────────────────▼─────────────────────────────┐
 │  Backend  (FastAPI + async uvicorn, v1.2.0)                │
-│ . REST: /sessions, /documents, /messages, /artifacts      │
-│ . SSE: /sessions/{id}/stream                              │
-│ . Persisted trace: /sessions/{id}/trace                   │
-│ . SQLite (sessions, chunks, FTS5, definitions, artifacts, │
+│ . REST: /sessions, /documents, /messages, /artifacts       │
+│ . SSE: /sessions/{id}/stream                               │
+│ . Persisted trace: /sessions/{id}/trace                    │
+│ . SQLite (sessions, chunks, FTS5, definitions, artifacts,  │
 │    agent_runs, trace_events)                               │
 └──────────────────────────────▲─────────────────────────────┘
                                │
 ┌──────────────────────────────▼─────────────────────────────┐
 │  Agent Orchestration  (anthropic SDK, async)               │
-│ . LeadOrchestrator: tool-use loop + compaction + finalize │
-│ . SubAgents: spawned dynamically, parallel via gather     │
-│ . Prompt caching on document chunks (1 h TTL)             │
-│ . Citation enforcement: rejects uncited subagent output   │
+│ . LeadOrchestrator: tool-use loop + compaction + finalize  │
+│ . SubAgents: spawned dynamically, parallel via gather      │
+│ . Prompt caching on document chunks (1 h TTL)              │
+│ . Citation enforcement: rejects uncited subagent output    │
 └────────────────────────────────────────────────────────────┘
 ```
 
