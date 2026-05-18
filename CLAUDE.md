@@ -45,12 +45,6 @@ cli.py                    # CLI — drives the same async orchestrator, no serve
 
 ---
 
-## Architecture in one paragraph
-
-The frontend (Next.js) communicates with the backend (FastAPI) via REST and **direct SSE to port 8000** (bypassing the Next.js proxy, which buffers streams). Each user message spawns a background `asyncio.Task` running `run_lead`. The Lead operates in a bounded tool-use loop (max 40 iterations), calling `search_document`, `read_document_chunk`, `resolve_reference`, `lookup_definition`, `spawn_subagent`, `write_artifact`, and `finalize`. Subagents are spawned dynamically with isolated context windows and run in parallel via `asyncio.gather`. All state persists in a single SQLite file (`deep_reading.db`) using WAL mode and an FTS5 virtual table for keyword search.
-
----
-
 ## Running the project
 
 **Always run from the repo root** — the project is a Python package and `uvicorn` must find `backend/` on `sys.path`.
@@ -214,6 +208,7 @@ All schemas are in `backend/orchestrator/tools.py`.
 
 ## Further reading
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — component-level architecture with system diagram and design decisions
-- [technical_docs.md](technical_docs.md) — full API reference, SSE protocol, schema, orchestration internals, extension points
-- [CHANGELOG.md](CHANGELOG.md) — version history (Keep a Changelog format)
+- [ARCHITECTURE.md](ARCHITECTURE.md): component-level architecture with system diagram and design decisions
+- [README.md](README.md): User Guide Manual.
+- [technical_docs.md](technical_docs.md): full API reference, SSE protocol, schema, orchestration internals, extension points
+- [CHANGELOG.md](CHANGELOG.md): version history (Keep a Changelog format)
