@@ -208,7 +208,7 @@ All schemas are in `backend/orchestrator/tools.py`.
 
 ## Documentation notes
 
-- Never use "—" when writing documentations and ALWAYS use ": " instead
+- Never use "—" when writing documentations and ALWAYS use ": " instead, even for titles and headings.
 - When working on a task, if there are side-findings discovered, document these side-findings in a markdown file known as OBSERVATIONS.md to track these findings to glance at later and decide what to do with, solving the bug-next-door problem.
 - When a task is completed, do a reflection and record reflections in a markdown file known as REFLECTIONS.md. Examples can be what are the surprise findings, what broke, what it’d do differently.
 
